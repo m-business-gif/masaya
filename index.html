@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>在庫管理システム</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <h1>在庫管理システム</h1>
+      <nav>
+        <button class="nav-btn active" data-view="dashboard">ダッシュボード</button>
+        <button class="nav-btn" data-view="inventory">在庫一覧</button>
+        <button class="nav-btn" data-view="add">商品追加</button>
+        <button class="nav-btn" data-view="history">入出庫履歴</button>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <!-- ダッシュボード -->
+    <section id="view-dashboard" class="view active">
+      <h2>ダッシュボード</h2>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">総商品数</div>
+          <div class="stat-value" id="stat-total">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">在庫総数</div>
+          <div class="stat-value" id="stat-stock">0</div>
+        </div>
+        <div class="stat-card alert">
+          <div class="stat-label">在庫不足</div>
+          <div class="stat-value" id="stat-low">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">在庫総額</div>
+          <div class="stat-value" id="stat-value">¥0</div>
+        </div>
+      </div>
+
+      <h3>在庫不足アラート</h3>
+      <div id="low-stock-list" class="alert-list"></div>
+
+      <h3>カテゴリ別在庫</h3>
+      <div id="category-summary" class="category-grid"></div>
+    </section>
+
+    <!-- 在庫一覧 -->
+    <section id="view-inventory" class="view">
+      <h2>在庫一覧</h2>
+      <div class="toolbar">
+        <input type="text" id="search-input" placeholder="商品名・カテゴリで検索...">
+        <select id="filter-category">
+          <option value="">全カテゴリ</option>
+        </select>
+        <select id="sort-select">
+          <option value="name">名前順</option>
+          <option value="quantity-asc">在庫数(少ない順)</option>
+          <option value="quantity-desc">在庫数(多い順)</option>
+          <option value="category">カテゴリ順</option>
+        </select>
+      </div>
+      <div class="table-wrapper">
+        <table id="inventory-table">
+          <thead>
+            <tr>
+              <th>商品名</th>
+              <th>カテゴリ</th>
+              <th>在庫数</th>
+              <th>単位</th>
+              <th>単価</th>
+              <th>在庫下限</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="inventory-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 商品追加/編集 -->
+    <section id="view-add" class="view">
+      <h2 id="form-title">商品追加</h2>
+      <form id="product-form" class="form-card">
+        <input type="hidden" id="edit-id">
+        <div class="form-row">
+          <label for="f-name">商品名 <span class="required">*</span></label>
+          <input type="text" id="f-name" required placeholder="例：A4コピー用紙">
+        </div>
+        <div class="form-row">
+          <label for="f-category">カテゴリ <span class="required">*</span></label>
+          <input type="text" id="f-category" required list="category-list" placeholder="例：文具">
+          <datalist id="category-list"></datalist>
+        </div>
+        <div class="form-row">
+          <label for="f-quantity">初期在庫数 <span class="required">*</span></label>
+          <input type="number" id="f-quantity" required min="0" value="0">
+        </div>
+        <div class="form-row">
+          <label for="f-unit">単位</label>
+          <input type="text" id="f-unit" placeholder="例：個、箱、kg">
+        </div>
+        <div class="form-row">
+          <label for="f-price">単価 (円)</label>
+          <input type="number" id="f-price" min="0" value="0">
+        </div>
+        <div class="form-row">
+          <label for="f-min">在庫下限（アラート基準）</label>
+          <input type="number" id="f-min" min="0" value="5">
+        </div>
+        <div class="form-row">
+          <label for="f-note">備考</label>
+          <textarea id="f-note" rows="2" placeholder="メモなど"></textarea>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn-primary">保存</button>
+          <button type="button" id="form-cancel" class="btn-secondary">キャンセル</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- 入出庫履歴 -->
+    <section id="view-history" class="view">
+      <h2>入出庫履歴</h2>
+      <div class="toolbar">
+        <select id="history-filter">
+          <option value="">全商品</option>
+        </select>
+        <button class="btn-danger" id="clear-history">履歴をクリア</button>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>日時</th>
+              <th>商品名</th>
+              <th>種別</th>
+              <th>数量</th>
+              <th>変更後在庫</th>
+              <th>備考</th>
+            </tr>
+          </thead>
+          <tbody id="history-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- 入出庫モーダル -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <h3 id="modal-title">在庫更新</h3>
+      <input type="hidden" id="modal-product-id">
+      <div class="form-row">
+        <label>商品名</label>
+        <div id="modal-product-name" class="modal-info"></div>
+      </div>
+      <div class="form-row">
+        <label>現在の在庫</label>
+        <div id="modal-current-stock" class="modal-info"></div>
+      </div>
+      <div class="form-row">
+        <label for="modal-type">種別</label>
+        <select id="modal-type">
+          <option value="in">入庫</option>
+          <option value="out">出庫</option>
+          <option value="adjust">在庫調整</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label for="modal-amount" id="modal-amount-label">数量</label>
+        <input type="number" id="modal-amount" min="1" value="1">
+      </div>
+      <div class="form-row">
+        <label for="modal-note">備考</label>
+        <input type="text" id="modal-note" placeholder="メモ">
+      </div>
+      <div class="form-actions">
+        <button class="btn-primary" id="modal-confirm">更新</button>
+        <button class="btn-secondary" id="modal-cancel">キャンセル</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
