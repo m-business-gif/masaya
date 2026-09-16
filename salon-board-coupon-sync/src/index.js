@@ -5,6 +5,7 @@ import { login } from './login.js';
 import { fetchSalonList, excludeConfiguredSalons } from './salons.js';
 import { fetchCouponNamesWithRecentReservations } from './reservations.js';
 import { fetchCoupons, computeBoostedOrder, applyOrder } from './coupons.js';
+import { requestReflect } from './publish.js';
 
 const ARTIFACTS_DIR = new URL('../artifacts/', import.meta.url).pathname;
 
@@ -22,7 +23,14 @@ async function processSalon(page, salon) {
   console.log(`  [coupons] 現在のクーポン数: ${coupons.length}件`);
 
   const plan = computeBoostedOrder(coupons, couponNamesWithReservations);
-  return applyOrder(page, plan);
+  const orderResult = await applyOrder(page, plan);
+
+  if (orderResult.applied) {
+    const publishResult = await requestReflect(page);
+    return { ...orderResult, ...publishResult };
+  }
+
+  return { ...orderResult, requested: false };
 }
 
 async function main() {
@@ -72,7 +80,7 @@ async function main() {
     if (r.error) {
       console.log(`  - ${r.salon}: ERROR ${r.error}`);
     } else {
-      console.log(`  - ${r.salon}: applied=${r.applied} changedCount=${r.changes.length}`);
+      console.log(`  - ${r.salon}: applied=${r.applied} changedCount=${r.changes.length} reflectRequested=${r.requested}`);
     }
   }
 

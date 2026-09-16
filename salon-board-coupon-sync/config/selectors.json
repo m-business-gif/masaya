@@ -37,10 +37,10 @@
   },
 
   "publish": {
-    "_comment": "確認済み：並び替え保存だけではHot Pepper Beauty上に反映されない。掲載管理TOPの「クーポン掲載情報」行の反映申請ボタンを押し、その先の確認画面で「クーポン掲載情報を反映する」ボタンを押す必要がある（未確認部分あり）。",
-    "publishManagementTopUrl": "REQUIRES_VERIFICATION（掲載管理TOPのURL）",
-    "requestReflectButtonSelector": "REQUIRES_VERIFICATION（「クーポン掲載情報」行の反映申請ボタン）",
-    "confirmReflectButtonSelector": "REQUIRES_VERIFICATION（確認画面の「クーポン掲載情報を反映する」ボタン）",
-    "reflectSuccessIndicator": "REQUIRES_VERIFICATION"
+    "_comment": "確認済み：並び替え保存だけではHot Pepper Beauty上に反映されない。掲載管理TOPの「クーポン掲載情報」行にある反映申請ボタン（未申請時のみ青く有効化される）をクリックすると、確認ダイアログを挟まず直接『クーポン掲載情報反映予約』完了画面に遷移する。",
+    "navTabSelector": "text=\"掲載管理\"",
+    "topSubTabSelector": "text=\"掲載管理TOP\"",
+    "requestReflectButtonSelector": "text=\"クーポン掲載情報\" >> xpath=ancestor::tr[1] >> text=\"反映申請\"",
+    "reflectSuccessIndicator": "text=\"クーポン掲載情報の本番反映を予約しました。\""
   }
 }
