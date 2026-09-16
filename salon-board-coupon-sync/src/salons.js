@@ -1,4 +1,4 @@
-import { selectors } from './config.js';
+import { selectors, excludedSalonNamePatterns } from './config.js';
 
 /**
  * サロン一覧画面から、管理対象の全サロン（名前・個別ページURL）を取得する。
@@ -20,4 +20,13 @@ export async function fetchSalonList(page) {
   }
 
   return salons;
+}
+
+/**
+ * config/excluded-salons.json に登録された名前（部分一致）を含むサロンを除外する。
+ */
+export function excludeConfiguredSalons(salons) {
+  return salons.filter(
+    (salon) => !excludedSalonNamePatterns.some((pattern) => salon.name.includes(pattern))
+  );
 }

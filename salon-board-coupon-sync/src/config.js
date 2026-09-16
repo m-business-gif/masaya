@@ -8,6 +8,10 @@ export const selectors = JSON.parse(
   readFileSync(path.join(__dirname, '..', 'config', 'selectors.json'), 'utf-8')
 );
 
+export const excludedSalonNamePatterns = JSON.parse(
+  readFileSync(path.join(__dirname, '..', 'config', 'excluded-salons.json'), 'utf-8')
+);
+
 function requireEnv(name) {
   const value = process.env[name];
   if (!value) throw new Error(`環境変数 ${name} が設定されていません`);

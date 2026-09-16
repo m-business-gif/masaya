@@ -2,7 +2,7 @@ import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
 import { env, assertSelectorsCalibrated } from './config.js';
 import { login } from './login.js';
-import { fetchSalonList } from './salons.js';
+import { fetchSalonList, excludeConfiguredSalons } from './salons.js';
 import { fetchCouponNamesWithRecentReservations } from './reservations.js';
 import { fetchCoupons, computeBoostedOrder, applyOrder } from './coupons.js';
 
@@ -41,8 +41,10 @@ async function main() {
     await login(page);
     console.log('[login] ログイン成功');
 
-    const salons = await fetchSalonList(page);
-    console.log(`[salons] 対象サロン数: ${salons.length}件`);
+    const allSalons = await fetchSalonList(page);
+    const salons = excludeConfiguredSalons(allSalons);
+    const excludedCount = allSalons.length - salons.length;
+    console.log(`[salons] 対象サロン数: ${salons.length}件（除外設定: ${excludedCount}件）`);
 
     for (const salon of salons) {
       console.log(`[salon] ${salon.name} を処理中...`);
