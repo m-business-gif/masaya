@@ -1,7 +1,23 @@
 # サロンボード クーポン自動並び替え
 
 直近の来店実績（売上明細でクーポンが使われた実績）があるクーポンを、サロンボードの表示順で上位に自動的に並び替えるスクリプトです。
-毎週月曜 06:00 (JST) に GitHub Actions で自動実行されます（`.github/workflows/salon-board-coupon-reorder.yml`）。
+
+## ステータス：GitHub Actions（クラウド）からは現状動作しません
+
+2026/09/16 の検証で、salonboard.com が GitHub Actions のようなクラウド/データセンターの
+IPアドレスからのアクセスに**応答を返さない**（TCP接続・TLSハンドシェイクまでは成功するが、
+HTTPリクエスト送信後に無応答のままタイムアウト）ことを確認しました。ボット対策（Akamai等）
+によるものとみられます。ID/パスワード（Secrets）は正しく設定されていても、この通信の壁の
+せいで自動化は失敗します。
+
+そのため、`.github/workflows/salon-board-coupon-reorder.yml` の**毎週自動実行は無効化**して
+あります（`workflow_dispatch` による手動実行のみ残しています）。将来、自宅PCなどを
+[self-hosted runner](https://docs.github.com/actions/hosting-your-own-runners) として
+登録すれば、そこから実行することで回避できる可能性があります（未検証。Playwrightの自動操作
+自体が別途ボット判定される可能性は残ります）。
+
+現状の運用は、このリポジトリの自動化ではなく、毎週月曜朝にリマインダー通知を送る方式に
+切り替えています（詳細はユーザーとのやり取り参照）。
 
 ## 重要：使い始める前に
 

@@ -1,9 +1,12 @@
 name: サロンボード クーポン自動並び替え
 
+# NOTE: サロンボード(salonboard.com)はGitHub ActionsのようなクラウドのIPからの
+# アクセスに応答しない（ボット対策とみられる。診断結果はREADME.md参照）ため、
+# 現状ここでの自動実行は成功しない。毎週の自動失敗通知を避けるため schedule
+# トリガーは一旦外し、手動実行(workflow_dispatch)のみ残している。
+# 将来 self-hosted runner（自宅PC等）を用意した場合はここに schedule を戻すか、
+# runs-on を self-hosted に変更して運用する。
 on:
-  schedule:
-    # 毎週月曜 06:00 JST (= 前週日曜 21:00 UTC)
-    - cron: '0 21 * * 0'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -19,19 +22,6 @@ jobs:
         working-directory: salon-board-coupon-sync
     steps:
       - uses: actions/checkout@v4
-
-      - name: Diagnose connectivity to Salon Board
-        run: |
-          echo "=== curl -I (HEAD) ==="
-          curl -I --max-time 15 -sS https://salonboard.com/login/ || echo "curl exit code: $?"
-          echo
-          echo "=== curl -v (verbose GET, headers only shown, body truncated) ==="
-          curl -v --max-time 15 -sS https://salonboard.com/login/ -o /tmp/body.html 2>&1 | head -c 3000 || echo "curl exit code: $?"
-          echo
-          echo "=== response body size ==="
-          wc -c /tmp/body.html 2>/dev/null || echo "no body captured"
-          echo "=== first 500 chars of body ==="
-          head -c 500 /tmp/body.html 2>/dev/null || echo "no body captured"
 
       - uses: actions/setup-node@v4
         with:
