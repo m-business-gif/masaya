@@ -9,8 +9,13 @@
     "successIndicator": "text=\"サロン一覧\""
   },
 
+  "salonList": {
+    "url": "REQUIRES_VERIFICATION（ログイン直後のサロン一覧ページのURLをアドレスバーからコピー）",
+    "rowLinkSelector": "text=\"キレイサロン\" >> xpath=following::table[1]//a"
+  },
+
   "reservationList": {
-    "url": "REQUIRES_VERIFICATION https://salonboard.com/KLP/reserve/reserveList/",
+    "url": "REQUIRES_VERIFICATION（各サロン内で「予約管理」をクリックした先のURL）",
     "rowSelector": "REQUIRES_VERIFICATION .reserveListRow",
     "couponNameInRowSelector": "REQUIRES_VERIFICATION .couponName",
     "dateInRowSelector": "REQUIRES_VERIFICATION .reserveDate",
@@ -20,10 +25,14 @@
   },
 
   "couponList": {
-    "url": "REQUIRES_VERIFICATION https://salonboard.com/CNK/draft/couponList/",
-    "rowSelector": "REQUIRES_VERIFICATION .couponListRow",
-    "couponNameInRowSelector": "REQUIRES_VERIFICATION .couponName",
-    "orderInputInRowSelector": "REQUIRES_VERIFICATION input.displayOrder",
+    "_comment": "「掲載管理」タブ→「クーポン」サブタブで到達。順番の直接編集か「クーポン並び替え登録」ボタン経由の専用画面かは要確認。",
+    "navTabSelector": "text=\"掲載管理\"",
+    "subTabSelector": "text=\"クーポン\"",
+    "reorderButtonSelector": "text=\"クーポン並び替え登録\"",
+    "url": "REQUIRES_VERIFICATION（クーポン掲載情報一覧のURL）",
+    "rowSelector": "text=\"クーポン一覧\" >> xpath=following::table[1] >> tr:has(td)",
+    "couponNameInRowSelector": "td:nth-of-type(4)",
+    "orderInputInRowSelector": "REQUIRES_VERIFICATION（この一覧内の「順番」入力欄で直接編集できるか、別画面が必要か確認中）",
     "saveButton": "REQUIRES_VERIFICATION #saveOrderBtn",
     "saveSuccessIndicator": "REQUIRES_VERIFICATION text=保存しました"
   }
