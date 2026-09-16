@@ -32,7 +32,16 @@
     "rowSelector": "text=\"お客様名\" >> xpath=ancestor::table[1] >> tr:has(td)",
     "categoryInRowSelector": "td:nth-of-type(3)",
     "menuNameInRowSelector": "td:nth-of-type(4)",
-    "nextPageButtonSelector": "text=\"次へ\""
+    "nextPageButtonSelector": "text=\"次へ\"",
+
+    "exportColumns": {
+      "_comment": "売上ダッシュボード（dashboard/）用の詳細エクスポート（src/exportSales.js）でのみ使う追加列セレクタ。実機未検証のため、値はすべて REQUIRES_VERIFICATION のプレースホルダのままにしてある。npm run codegen で売上明細画面を操作し、実際の列位置を確認してから埋めること（README「セレクタの検証方法」参照）。埋めるまでは npm run export:sales はエラーで停止する。クーポン自動並び替え（既存の categoryInRowSelector / menuNameInRowSelector 利用）には影響しない。",
+      "dateInRowSelector": "REQUIRES_VERIFICATION",
+      "staffInRowSelector": "REQUIRES_VERIFICATION",
+      "amountInRowSelector": "REQUIRES_VERIFICATION",
+      "customerTypeInRowSelector": "REQUIRES_VERIFICATION",
+      "reservationRouteInRowSelector": "REQUIRES_VERIFICATION"
+    }
   },
 
   "couponList": {

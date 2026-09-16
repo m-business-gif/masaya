@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>売上ダッシュボード</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <h1>売上ダッシュボード</h1>
+      <nav>
+        <button class="nav-btn active" data-view="summary">📈 サマリー</button>
+        <button class="nav-btn" data-view="staff">👥 スタッフ分析</button>
+        <button class="nav-btn" data-view="menu">🍔 メニュー分析</button>
+        <button class="nav-btn" data-view="products">🛒 物販分析</button>
+        <button class="nav-btn" data-view="traffic">📊 客数・稼働分析</button>
+      </nav>
+      <span id="data-freshness" class="freshness"></span>
+    </div>
+  </header>
+
+  <main id="app">
+    <div id="error-banner" class="error-banner hidden"></div>
+
+    <!-- 1. サマリービュー -->
+    <section id="view-summary" class="view active">
+      <h2>今月のサマリー</h2>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">今月の売上（全店合計）</div>
+          <div class="stat-value" id="stat-total-sales">-</div>
+          <div class="stat-sub" id="stat-mom-sales"></div>
+          <div class="stat-sub" id="stat-period-note"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">今月の客数（全店合計）</div>
+          <div class="stat-value" id="stat-total-customers">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">客単価</div>
+          <div class="stat-value" id="stat-avg-spend">-</div>
+        </div>
+        <div class="stat-card alert" id="alert-card">
+          <div class="stat-label">アラート</div>
+          <div class="stat-value" id="stat-alert-count">0</div>
+        </div>
+      </div>
+
+      <div id="alert-list" class="alert-list"></div>
+
+      <h3>店舗別実績</h3>
+      <table class="data-table">
+        <thead>
+          <tr><th>店舗</th><th>売上</th><th>前月比</th><th>客数</th><th>客単価</th><th>目標達成率</th></tr>
+        </thead>
+        <tbody id="salon-table-body"></tbody>
+      </table>
+    </section>
+
+    <!-- 2. スタッフ分析 -->
+    <section id="view-staff" class="view">
+      <h2>スタッフ分析</h2>
+      <div class="chart-card">
+        <h3>個人売上ランキング</h3>
+        <canvas id="chart-staff-ranking"></canvas>
+      </div>
+      <div class="two-col">
+        <div class="chart-card">
+          <h3>オプション売上率</h3>
+          <canvas id="chart-option-rate"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>物販売上率</h3>
+          <canvas id="chart-product-rate"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. メニュー分析 -->
+    <section id="view-menu" class="view">
+      <h2>メニュー分析</h2>
+      <div class="two-col">
+        <div class="chart-card">
+          <h3>メニュー別売上構成</h3>
+          <canvas id="chart-menu"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>クーポン別売上</h3>
+          <canvas id="chart-coupon"></canvas>
+        </div>
+      </div>
+      <h3>オプション販売状況</h3>
+      <table class="data-table">
+        <thead><tr><th>オプション名</th><th>売上</th><th>件数</th></tr></thead>
+        <tbody id="option-table-body"></tbody>
+      </table>
+    </section>
+
+    <!-- 4. 物販分析 -->
+    <section id="view-products" class="view">
+      <h2>物販分析</h2>
+      <div class="chart-card">
+        <h3>商品別売上</h3>
+        <canvas id="chart-products"></canvas>
+      </div>
+      <div class="two-col">
+        <div>
+          <h3>回数券販売状況</h3>
+          <table class="data-table">
+            <thead><tr><th>回数券名</th><th>売上</th><th>件数</th></tr></thead>
+            <tbody id="ticket-table-body"></tbody>
+          </table>
+        </div>
+        <div>
+          <h3>美容液など物販内訳</h3>
+          <table class="data-table">
+            <thead><tr><th>商品名</th><th>売上</th><th>件数</th></tr></thead>
+            <tbody id="serum-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. 客数・稼働分析 -->
+    <section id="view-traffic" class="view">
+      <h2>客数・稼働分析</h2>
+      <div class="chart-card">
+        <h3>新規・再来推移</h3>
+        <canvas id="chart-new-returning"></canvas>
+      </div>
+      <div class="two-col">
+        <div class="chart-card">
+          <h3>予約経路別集客</h3>
+          <canvas id="chart-route"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>時間帯別来店数</h3>
+          <canvas id="chart-hourly"></canvas>
+        </div>
+      </div>
+      <h3>スタッフ別 対応件数（来店実績ベースの参考値・実勤務時間ではありません）</h3>
+      <table class="data-table">
+        <thead><tr><th>スタッフ</th><th>対応件数</th></tr></thead>
+        <tbody id="staff-visits-table-body"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

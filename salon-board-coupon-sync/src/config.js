@@ -34,3 +34,14 @@ export function assertSelectorsCalibrated() {
     );
   }
 }
+
+export function assertExportSelectorsCalibrated() {
+  const flat = JSON.stringify(selectors.salesDetail.exportColumns);
+  if (flat.includes('REQUIRES_VERIFICATION')) {
+    throw new Error(
+      'config/selectors.json の salesDetail.exportColumns に未検証(REQUIRES_VERIFICATION)の' +
+      'セレクタが残っています。売上ダッシュボードの詳細エクスポート機能を使うには、' +
+      '実際のサロンボード画面で列位置を確認し、値を埋めてから実行してください。詳細はREADME.mdを参照。'
+    );
+  }
+}
