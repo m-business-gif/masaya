@@ -3,10 +3,10 @@
 
   "loginUrl": "https://salonboard.com/login/",
   "login": {
-    "idInput": "REQUIRES_VERIFICATION #loginId",
-    "passwordInput": "REQUIRES_VERIFICATION #password",
-    "submitButton": "REQUIRES_VERIFICATION button[type=submit]",
-    "successIndicator": "REQUIRES_VERIFICATION text=サロンボード"
+    "idInput": "input[type=password] >> xpath=preceding::input[1]",
+    "passwordInput": "input[type=password]",
+    "submitButton": "text=\"ログイン\"",
+    "successIndicator": "REQUIRES_VERIFICATION（ログイン後の画面のスクリーンショットが必要）"
   },
 
   "reservationList": {
