@@ -1,0 +1,56 @@
+{
+  "_comment": "以下のURL・セレクタは実際のサロンボード画面で必ず検証してください。サロンボードはRecruit社が随時UIを変更するため、このファイルの値だけを更新すればロジック側(src/*.js)を触らずに追従できるよう分離しています。検証方法はREADME.mdの「セレクタの検証方法」を参照。",
+
+  "loginUrl": "https://salonboard.com/login/",
+  "login": {
+    "idInput": "input[type=password] >> xpath=preceding::input[1]",
+    "passwordInput": "input[type=password]",
+    "submitButton": "text=\"ログイン\"",
+    "successIndicator": "text=\"サロン一覧\""
+  },
+
+  "salonList": {
+    "_comment": "ログイン直後は既にこの画面にいるため、URLでの遷移は不要。",
+    "rowLinkSelector": "text=\"キレイサロン\" >> xpath=following::table[1]//a"
+  },
+
+  "salesDetail": {
+    "_comment": "「売上管理」＞「売上明細」画面。来店日で期間検索し、カテゴリ列に「クーポン」を含む行のメニュー名を集計する。検索期間の日付欄はテキスト直接入力不可・クリック式カレンダーピッカー（確認済み）。",
+    "navTabSelector": "text=\"売上管理\"",
+    "subTabSelector": "text=\"売上明細\"",
+    "visitDateRadioSelector": "text=\"来店日\"",
+    "dateFromInput": "text=\"検索期間\" >> xpath=following::input[1]",
+    "dateToInput": "text=\"検索期間\" >> xpath=following::input[2]",
+    "datePicker": {
+      "_comment": "カレンダーピッカーは同時に1つしか開かない前提。年・月の見出しテキストを読み取り「前の月」「次の月」で目的の月まで移動してから日付をクリックする（src/sales.js の pickDate）。",
+      "yearLabelSelector": "text=/^\\d{4}$/",
+      "monthLabelSelector": "text=/^\\d{1,2}月$/",
+      "prevMonthButtonSelector": "text=\"前の月\"",
+      "nextMonthButtonSelector": "text=\"次の月\""
+    },
+    "searchButtonSelector": "text=\"検索する\"",
+    "rowSelector": "text=\"お客様名\" >> xpath=ancestor::table[1] >> tr:has(td)",
+    "categoryInRowSelector": "td:nth-of-type(3)",
+    "menuNameInRowSelector": "td:nth-of-type(4)",
+    "nextPageButtonSelector": "text=\"次へ\""
+  },
+
+  "couponList": {
+    "_comment": "推測（スクリーンショットからの解釈、未実機検証）：別画面への遷移はなく、この一覧の「No.」欄（各行1列目の入力欄）を直接書き換えて、右上の「クーポン並び替え登録」ボタンを押すと保存される。保存後に「並び替えが完了しました。」画面が出る。初回のdry-run実行結果で必ず確認すること。",
+    "navTabSelector": "text=\"掲載管理\"",
+    "subTabSelector": "text=\"クーポン\"",
+    "rowSelector": "text=\"クーポン一覧\" >> xpath=following::table[1] >> tr:has(td)",
+    "couponNameInRowSelector": "td:nth-of-type(4)",
+    "orderInputInRowSelector": "td:nth-of-type(1) input",
+    "saveButton": "text=\"クーポン並び替え登録\"",
+    "saveSuccessIndicator": "text=\"並び替えが完了しました。\""
+  },
+
+  "publish": {
+    "_comment": "確認済み：並び替え保存だけではHot Pepper Beauty上に反映されない。掲載管理TOPの「クーポン掲載情報」行にある反映申請ボタン（未申請時のみ青く有効化される）をクリックすると、確認ダイアログを挟まず直接『クーポン掲載情報反映予約』完了画面に遷移する。",
+    "navTabSelector": "text=\"掲載管理\"",
+    "topSubTabSelector": "text=\"掲載管理TOP\"",
+    "requestReflectButtonSelector": "text=\"クーポン掲載情報\" >> xpath=ancestor::tr[1] >> text=\"反映申請\"",
+    "reflectSuccessIndicator": "text=\"クーポン掲載情報の本番反映を予約しました。\""
+  }
+}
