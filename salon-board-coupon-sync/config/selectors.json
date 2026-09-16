@@ -1,0 +1,30 @@
+{
+  "_comment": "以下のURL・セレクタは実際のサロンボード画面で必ず検証してください。サロンボードはRecruit社が随時UIを変更するため、このファイルの値だけを更新すればロジック側(src/*.js)を触らずに追従できるよう分離しています。検証方法はREADME.mdの「セレクタの検証方法」を参照。",
+
+  "loginUrl": "https://salonboard.com/login/",
+  "login": {
+    "idInput": "REQUIRES_VERIFICATION #loginId",
+    "passwordInput": "REQUIRES_VERIFICATION #password",
+    "submitButton": "REQUIRES_VERIFICATION button[type=submit]",
+    "successIndicator": "REQUIRES_VERIFICATION text=サロンボード"
+  },
+
+  "reservationList": {
+    "url": "REQUIRES_VERIFICATION https://salonboard.com/KLP/reserve/reserveList/",
+    "rowSelector": "REQUIRES_VERIFICATION .reserveListRow",
+    "couponNameInRowSelector": "REQUIRES_VERIFICATION .couponName",
+    "dateInRowSelector": "REQUIRES_VERIFICATION .reserveDate",
+    "dateRangeFromInput": "REQUIRES_VERIFICATION #dateFrom",
+    "dateRangeToInput": "REQUIRES_VERIFICATION #dateTo",
+    "searchButton": "REQUIRES_VERIFICATION #searchBtn"
+  },
+
+  "couponList": {
+    "url": "REQUIRES_VERIFICATION https://salonboard.com/CNK/draft/couponList/",
+    "rowSelector": "REQUIRES_VERIFICATION .couponListRow",
+    "couponNameInRowSelector": "REQUIRES_VERIFICATION .couponName",
+    "orderInputInRowSelector": "REQUIRES_VERIFICATION input.displayOrder",
+    "saveButton": "REQUIRES_VERIFICATION #saveOrderBtn",
+    "saveSuccessIndicator": "REQUIRES_VERIFICATION text=保存しました"
+  }
+}

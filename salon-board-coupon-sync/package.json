@@ -1,0 +1,15 @@
+{
+  "name": "salon-board-coupon-sync",
+  "version": "0.1.0",
+  "private": true,
+  "description": "サロンボードのクーポン表示順を、直近の予約実績に基づいて自動で並び替えるスクリプト",
+  "type": "module",
+  "scripts": {
+    "reorder": "node src/index.js",
+    "reorder:dry-run": "DRY_RUN=true node src/index.js",
+    "codegen": "playwright codegen https://salonboard.com/"
+  },
+  "dependencies": {
+    "playwright": "^1.48.0"
+  }
+}
