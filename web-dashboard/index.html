@@ -787,7 +787,7 @@
   function calcSlotMinutes(row, opsSettings){
     if ((row.bucket||'') !== '施術') return 0;
     const override = opsSettings.categoryMinutes && opsSettings.categoryMinutes[row.category];
-    return (override!==undefined && override!==null && override!=='') ? Number(override) : (opsSettings.defaultSlotMinutes ?? 60);
+    return (override!==undefined && override!==null && override!=='') ? Number(override) : (opsSettings.defaultSlotMinutes ?? 75);
   }
 
   function computeUtilization(rows, opsSettings){
@@ -1194,7 +1194,7 @@
   let currentRows = [];
   let isSample = true;
   let targets = {default:0, bySalon:{}, lowThresholdPct:70};
-  let opsSettings = {shiftHours:8, defaultSlotMinutes:60, categoryMinutes:{}};
+  let opsSettings = {shiftHours:8, defaultSlotMinutes:75, categoryMinutes:{}};
   const renderedViews = new Set();
   const charts = {};
 
@@ -1556,7 +1556,7 @@
 
     try{
       const osnap = await db.doc('settings/operation').get();
-      if (osnap.exists) opsSettings = Object.assign({shiftHours:8, defaultSlotMinutes:60, categoryMinutes:{}}, osnap.data());
+      if (osnap.exists) opsSettings = Object.assign({shiftHours:8, defaultSlotMinutes:75, categoryMinutes:{}}, osnap.data());
     }catch(e){ /* keep defaults */ }
 
     try{
@@ -1616,7 +1616,7 @@
 
   function openOpsSettings(){
     $('#ops-shift-hours').value = opsSettings.shiftHours ?? 8;
-    $('#ops-default-minutes').value = opsSettings.defaultSlotMinutes ?? 60;
+    $('#ops-default-minutes').value = opsSettings.defaultSlotMinutes ?? 75;
     const cats = treatmentCategories();
     $('#ops-category-fields').innerHTML = cats.map(cat=>`
       <div class="field-row">
@@ -1635,7 +1635,7 @@
     });
     opsSettings = {
       shiftHours: Number($('#ops-shift-hours').value)||8,
-      defaultSlotMinutes: Number($('#ops-default-minutes').value)||60,
+      defaultSlotMinutes: Number($('#ops-default-minutes').value)||75,
       categoryMinutes,
     };
     if (db){
