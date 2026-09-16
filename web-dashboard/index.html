@@ -411,7 +411,7 @@
   <!-- 6. Royalty -->
   <section class="view" id="view-royalty">
     <div class="view-title">ロイヤリティ計算</div>
-    <div class="view-sub">オーナー別・店舗別の月次ロイヤリティ（自動計算・要確認の項目は備考欄をご覧ください）</div>
+    <div class="view-sub">SV別・店舗別の月次ロイヤリティ（自動計算・要確認の項目は備考欄をご覧ください）</div>
     <div class="stat-grid" id="royalty-owner-totals"></div>
     <div class="panel">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
@@ -420,7 +420,7 @@
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>店舗</th><th>オーナー</th><th>対象売上</th><th>ロイヤリティ額</th><th>備考</th><th></th></tr></thead>
+          <thead><tr><th>店舗</th><th>SV</th><th>対象売上</th><th>ロイヤリティ額</th><th>備考</th><th></th></tr></thead>
           <tbody id="royalty-tbody"></tbody>
         </table>
       </div>
@@ -435,7 +435,7 @@
     <h2>ロイヤリティ計算の設定</h2>
     <p class="hint">売上ベースは自動計算（サロンボードの金額は税込として扱い、税別の場合は自動で割り戻します）。段階（ティア）は上から順に判定され、「上限」を空欄にすると無制限（最終段階）になります。</p>
     <div class="field-row"><label>表示名</label><input type="text" id="ry-label"></div>
-    <div class="field-row"><label>オーナー</label><input type="text" id="ry-owner"></div>
+    <div class="field-row"><label>SV</label><input type="text" id="ry-owner"></div>
     <div class="field-row"><label>対象店舗</label><select id="ry-salon"></select></div>
     <div class="field-row"><label>売上ベース</label>
       <select id="ry-base">
