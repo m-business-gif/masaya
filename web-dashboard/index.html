@@ -242,6 +242,10 @@
       <select id="filter-month"></select>
     </div>
     <div class="filter-field">
+      <label for="filter-sv">SV</label>
+      <select id="filter-sv"><option value="">すべてのSV</option></select>
+    </div>
+    <div class="filter-field">
       <label for="filter-salon">店舗</label>
       <select id="filter-salon"><option value="">すべての店舗</option></select>
     </div>
@@ -287,10 +291,19 @@
     </div>
     <div id="alert-list"></div>
     <div class="panel">
+      <h3>SV別実績</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>SV</th><th>売上</th><th>前月比</th><th>客数</th><th>店舗数</th></tr></thead>
+          <tbody id="sv-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel">
       <h3>店舗別実績</h3>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>店舗</th><th>売上</th><th>前月比</th><th>客数</th><th>客単価</th><th>目標達成率</th></tr></thead>
+          <thead><tr><th>店舗</th><th>SV</th><th>売上</th><th>前月比</th><th>客数</th><th>客単価</th><th>目標達成率</th></tr></thead>
           <tbody id="salon-tbody"></tbody>
         </table>
       </div>
@@ -809,6 +822,18 @@
     return candidates.length===1 ? candidates[0] : null;
   }
 
+  // renderRoyalty() だけでなく、SVフィルターやSV別実績（サマリー）でも店舗→SVの対応を使うため、
+  // データが変わるたびに独立して最新化しておく。
+  function refreshRoyaltyMatches(){
+    const salons = distinctValues(currentRows, 'salon');
+    royaltyRules.forEach(rule=>{ rule.matchedSalon = autoMatchSalon(rule, salons); });
+  }
+
+  function svOf(salon){
+    const rule = royaltyRules.find(r=>r.matchedSalon===salon);
+    return rule ? rule.owner : null;
+  }
+
   async function loadRoyaltySettings(){
     if (!db) return;
     try{
@@ -826,8 +851,7 @@
   }
 
   function renderRoyalty(){
-    const salons = distinctValues(currentRows, 'salon');
-    royaltyRules.forEach(rule=>{ rule.matchedSalon = autoMatchSalon(rule, salons); });
+    refreshRoyaltyMatches();
 
     const month = $('#filter-month').value;
     const rowsByRule = royaltyRules.map(rule=>{
@@ -1091,14 +1115,20 @@
   }
 
   function populateFilters(){
-    const salonSel = $('#filter-salon'), staffSel = $('#filter-staff'), monthSel = $('#filter-month');
-    const curSalon = salonSel.value, curStaff = staffSel.value, curMonth = monthSel.value;
-    const rowsForStaffList = curSalon ? currentRows.filter(r=>r.salon===curSalon) : currentRows;
-    const rowsForSalonList = curStaff ? currentRows.filter(r=>r.staff===curStaff) : currentRows;
+    refreshRoyaltyMatches();
+
+    const svSel = $('#filter-sv'), salonSel = $('#filter-salon'), staffSel = $('#filter-staff'), monthSel = $('#filter-month');
+    const curSv = svSel.value, curSalon = salonSel.value, curStaff = staffSel.value, curMonth = monthSel.value;
+    const rowsForSv = curSv ? currentRows.filter(r=>svOf(r.salon)===curSv) : currentRows;
+    const rowsForStaffList = curSalon ? rowsForSv.filter(r=>r.salon===curSalon) : rowsForSv;
+    const rowsForSalonList = curStaff ? rowsForSv.filter(r=>r.staff===curStaff) : rowsForSv;
+    const svs = [...new Set(currentRows.map(r=>svOf(r.salon)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
     const salons = distinctValues(rowsForSalonList, 'salon');
     const staffs = distinctValues(rowsForStaffList, 'staff');
+    svSel.innerHTML = '<option value="">すべてのSV</option>' + svs.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
     salonSel.innerHTML = '<option value="">すべての店舗</option>' + salons.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
     staffSel.innerHTML = '<option value="">すべての担当</option>' + staffs.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+    svSel.value = svs.includes(curSv) ? curSv : '';
     salonSel.value = salons.includes(curSalon) ? curSalon : '';
     staffSel.value = staffs.includes(curStaff) ? curStaff : '';
 
@@ -1124,9 +1154,10 @@
   }
 
   function scopedRows(){
+    const sv = $('#filter-sv').value;
     const salon = $('#filter-salon').value;
     const staff = $('#filter-staff').value;
-    return currentRows.filter(r => (!salon || r.salon===salon) && (!staff || r.staff===staff));
+    return currentRows.filter(r => (!sv || svOf(r.salon)===sv) && (!salon || r.salon===salon) && (!staff || r.staff===staff));
   }
 
   function refDate(){
@@ -1144,11 +1175,12 @@
     updateMeta(dash);
   }
 
+  $('#filter-sv').addEventListener('change', applyFilterChange);
   $('#filter-salon').addEventListener('change', applyFilterChange);
   $('#filter-staff').addEventListener('change', applyFilterChange);
   $('#filter-month').addEventListener('change', applyFilterChange);
   $('#btn-filter-reset').addEventListener('click', ()=>{
-    $('#filter-salon').value=''; $('#filter-staff').value='';
+    $('#filter-sv').value=''; $('#filter-salon').value=''; $('#filter-staff').value='';
     applyFilterChange();
   });
 
@@ -1157,15 +1189,16 @@
     const isRealCurrentMonth = dash.period.thisMonth === monthKey(today);
     const todayIsMonthEnd = new Date(today.getFullYear(), today.getMonth()+1, 0).getDate() === today.getDate();
     const showPartialNote = isRealCurrentMonth && !todayIsMonthEnd;
-    const salon = $('#filter-salon').value, staff = $('#filter-staff').value;
+    const sv = $('#filter-sv').value, salon = $('#filter-salon').value, staff = $('#filter-staff').value;
     const scopeParts = [];
+    if (sv) scopeParts.push(`SV:${sv}`);
     if (salon) scopeParts.push(salon);
     if (staff) scopeParts.push(`${staff}担当`);
     const scopeText = scopeParts.length ? ` ・ ${scopeParts.join(' / ')}` : '';
     $('#period-meta').textContent = `${dash.period.thisMonth} の実績${showPartialNote ? '（月の途中まで）' : ''} ・ ${isSample ? 'サンプルデータ' : '取り込み済みデータ'}${scopeText}`;
     $('#sample-banner').hidden = !isSample;
-    $('#btn-filter-reset').hidden = !(salon || staff);
-    const scopeLabel = salon || '全店合計';
+    $('#btn-filter-reset').hidden = !(sv || salon || staff);
+    const scopeLabel = salon || (sv ? `SV:${sv}` : '全店合計');
     if ($('#scope-label-1')) $('#scope-label-1').textContent = scopeLabel;
     if ($('#scope-label-2')) $('#scope-label-2').textContent = scopeLabel;
   }
@@ -1211,12 +1244,33 @@
     $('#salon-tbody').innerHTML = salons.map(s=>`
       <tr>
         <td>${escapeHtml(s.salon)}</td>
+        <td>${escapeHtml(svOf(s.salon)||'-')}</td>
         <td class="num">${yen(s.sales)}</td>
         <td class="num">${pctText(s.momSalesPct)}</td>
         <td class="num">${s.customers.toLocaleString('ja-JP')}人<br><span style="color:var(--muted); font-size:.76rem;">新規${s.newCount}・再来${s.returningCount}</span></td>
         <td class="num">${yen(s.avgSpend)}</td>
         <td>${s.targetAchievementPct===null ? '<span class="pill pill-neutral">目標未設定</span>' : `<span class="pill ${s.isLow?'pill-warn':'pill-ok'}">${s.targetAchievementPct}%</span>`}</td>
-      </tr>`).join('') || '<tr><td colspan="6">データなし</td></tr>';
+      </tr>`).join('') || '<tr><td colspan="7">データなし</td></tr>';
+
+    const svMap = new Map();
+    salons.forEach(s=>{
+      const sv = svOf(s.salon) || '未設定';
+      const e = svMap.get(sv) || {sv, sales:0, prevMonthSales:0, customers:0, salonCount:0};
+      e.sales += s.sales; e.prevMonthSales += s.prevMonthSales; e.customers += s.customers; e.salonCount += 1;
+      svMap.set(sv, e);
+    });
+    const svRows = [...svMap.values()].map(e=>({
+      ...e,
+      momPct: e.prevMonthSales>0 ? Math.round(((e.sales-e.prevMonthSales)/e.prevMonthSales)*1000)/10 : null,
+    })).sort((a,b)=>b.sales-a.sales);
+    $('#sv-tbody').innerHTML = svRows.map(s=>`
+      <tr>
+        <td>${escapeHtml(s.sv)}</td>
+        <td class="num">${yen(s.sales)}</td>
+        <td class="num">${pctText(s.momPct)}</td>
+        <td class="num">${s.customers.toLocaleString('ja-JP')}人</td>
+        <td class="num">${s.salonCount}店舗</td>
+      </tr>`).join('') || '<tr><td colspan="5">データなし</td></tr>';
   }
 
   function renderStaff(dash){
