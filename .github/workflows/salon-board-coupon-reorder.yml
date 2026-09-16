@@ -20,6 +20,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Diagnose connectivity to Salon Board
+        run: |
+          echo "=== curl -I (HEAD) ==="
+          curl -I --max-time 15 -sS https://salonboard.com/login/ || echo "curl exit code: $?"
+          echo
+          echo "=== curl -v (verbose GET, headers only shown, body truncated) ==="
+          curl -v --max-time 15 -sS https://salonboard.com/login/ -o /tmp/body.html 2>&1 | head -c 3000 || echo "curl exit code: $?"
+          echo
+          echo "=== response body size ==="
+          wc -c /tmp/body.html 2>/dev/null || echo "no body captured"
+          echo "=== first 500 chars of body ==="
+          head -c 500 /tmp/body.html 2>/dev/null || echo "no body captured"
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
