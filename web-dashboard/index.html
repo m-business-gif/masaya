@@ -326,10 +326,8 @@
   <section class="view" id="view-menu">
     <div class="view-title">メニュー分析</div>
     <div class="view-sub">今月のメニュー構成</div>
-    <div class="two-col">
-      <div class="panel"><h3>メニュー別売上構成</h3><canvas id="c-menu"></canvas></div>
-      <div class="panel"><h3>クーポン別売上（上位10件）</h3><canvas id="c-coupon" style="max-height:420px;"></canvas></div>
-    </div>
+    <div class="panel"><h3>メニュー別売上構成</h3><canvas id="c-menu"></canvas></div>
+    <div class="panel"><h3>クーポン別売上（上位10件）</h3><canvas id="c-coupon" style="max-height:460px;"></canvas></div>
     <div class="panel">
       <h3>オプション販売状況</h3>
       <div class="table-wrap"><table><thead><tr><th>オプション名</th><th>売上</th><th>件数</th></tr></thead><tbody id="option-tbody"></tbody></table></div>
@@ -1248,28 +1246,74 @@
 
   function horizontalBarChart(canvasId, items, label){
     const fullNames = items.map(i=>i.name);
-    const labels = fullNames.map(n=>truncateLabel(n, 22));
+    const labels = fullNames.map(n=>truncateLabel(n, 15));
     const values = items.map(i=>i.sales);
+    const counts = items.map(i=>i.count);
+    const maxVal = Math.max(1, ...values);
+
+    // 各バーの右側に「◯件」を直接描き込む（Chart.js本体には件数表示機能がないため）
+    const countLabelsPlugin = {
+      id: `countLabels-${canvasId}`,
+      afterDatasetsDraw(chart){
+        const meta = chart.getDatasetMeta(0);
+        const ctx = chart.ctx;
+        ctx.save();
+        ctx.fillStyle = getVar('--muted');
+        ctx.font = '11px sans-serif';
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        meta.data.forEach((bar,i)=>{
+          if (counts[i]===undefined) return;
+          ctx.fillText(`${counts[i]}件`, bar.x + 6, bar.y);
+        });
+        ctx.restore();
+      },
+    };
+
     chartOrEmpty(canvasId, labels.length>0, canvas => new Chart(canvas, {
       type:'bar',
       data:{labels, datasets:[{label, data:values, backgroundColor:getVar('--accent')}]},
       options:{
         indexAxis:'y',
+        layout:{padding:{right:48}},
+        scales:{
+          x:{beginAtZero:true, suggestedMax:maxVal*1.12, ticks:{color:getVar('--muted')}},
+          y:{ticks:{color:getVar('--muted'), autoSkip:false}},
+        },
         plugins:{
           legend:{display:false},
-          tooltip:{callbacks:{title:(items2)=>fullNames[items2[0].dataIndex]}},
+          tooltip:{callbacks:{
+            title:(items2)=>fullNames[items2[0].dataIndex],
+            label:(ctx)=>`${yen(ctx.parsed.x)}（${counts[ctx.dataIndex]}件）`,
+          }},
         },
-        scales:{x:{beginAtZero:true, ticks:{color:getVar('--muted')}}, y:{ticks:{color:getVar('--muted')}}},
       },
+      plugins:[countLabelsPlugin],
     }));
   }
 
-  function doughnutChart(canvasId, labels, values){
+  function doughnutChart(canvasId, labels, values, formatValue){
+    formatValue = formatValue || yen;
     const palette = [getVar('--accent'), getVar('--accent-2'), getVar('--warn'), getVar('--danger'), '#7c6a9c', '#5b8fa8', '#a87f5b', '#6b9c6f'];
+    const total = values.reduce((a,b)=>a+b,0);
+    const pctOf = v => total>0 ? Math.round(v/total*1000)/10 : 0;
     chartOrEmpty(canvasId, labels.length>0, canvas => new Chart(canvas, {
       type:'doughnut',
       data:{labels, datasets:[{data:values, backgroundColor:labels.map((_,i)=>palette[i%palette.length])}]},
-      options:{plugins:{legend:{labels:{color:getVar('--ink-soft')}}}}
+      options:{plugins:{
+        legend:{labels:{
+          color:getVar('--ink-soft'),
+          generateLabels: chart => chart.data.labels.map((label,i)=>({
+            text:`${label}（${pctOf(chart.data.datasets[0].data[i])}%）`,
+            fillStyle: chart.data.datasets[0].backgroundColor[i],
+            strokeStyle: chart.data.datasets[0].backgroundColor[i],
+            index:i,
+          })),
+        }},
+        tooltip:{callbacks:{
+          label: ctx => `${ctx.label}: ${formatValue(ctx.parsed)}（${pctOf(ctx.parsed)}%）`,
+        }},
+      }},
     }));
   }
 
