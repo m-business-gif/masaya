@@ -328,7 +328,7 @@
     <div class="view-sub">今月のメニュー構成</div>
     <div class="two-col">
       <div class="panel"><h3>メニュー別売上構成</h3><canvas id="c-menu"></canvas></div>
-      <div class="panel"><h3>クーポン別売上</h3><canvas id="c-coupon"></canvas></div>
+      <div class="panel"><h3>クーポン別売上（上位10件）</h3><canvas id="c-coupon" style="max-height:420px;"></canvas></div>
     </div>
     <div class="panel">
       <h3>オプション販売状況</h3>
@@ -670,9 +670,26 @@
     return {ranking, optionRate: rateFor('option'), productRate: rateFor('product')};
   }
 
+  // 品目名はキャンペーン文言込みの長い自由記述（「【次回予約限定】まつ毛パーマ¥4800→¥4400」等）で
+  // 実質同じ施術が無数のバリエーションに散ってしまうため、実際の施術内容（まつ毛パーマ／眉毛ワックス／
+  // 眉毛パーマ／その組み合わせ）に正規化して集計する。判定はキーワードベースの近似。
+  function normalizeMenuName(row){
+    const text = row.itemName || '';
+    const hasEyelash = /(まつ毛|まつげ|パリジェンヌ|ラッシュリフト|マツパ)/.test(text);
+    const browMention = /(眉|アイブロウ)/.test(text);
+    const hasBrowWax = browMention && /(ワックス|WAX|wax|スタイリング|ブロウリフト)/.test(text);
+    const hasBrowPerm = browMention && !hasBrowWax && /パーマ/.test(text);
+    if (hasEyelash && hasBrowWax) return 'まつ毛パーマ+眉毛ワックス';
+    if (hasEyelash && hasBrowPerm) return 'まつ毛パーマ+眉毛パーマ';
+    if (hasEyelash) return 'まつ毛パーマ';
+    if (hasBrowWax) return '眉毛ワックス';
+    if (hasBrowPerm) return '眉毛パーマ';
+    return 'その他';
+  }
+
   function buildMenu(rows){
     return {
-      byMenu: sumBy(rows.filter(r=>classify(r)==='menu'), r=>r.itemName),
+      byMenu: sumBy(rows.filter(r=>classify(r)==='menu'), r=>normalizeMenuName(r)),
       byCoupon: sumBy(rows.filter(r=>classify(r)==='coupon'), r=>r.itemName),
       optionStatus: sumBy(rows.filter(r=>classify(r)==='option'), r=>r.itemName),
     };
@@ -1213,6 +1230,40 @@
     }));
   }
 
+  function truncateLabel(s, max){
+    return s.length>max ? s.slice(0,max)+'…' : s;
+  }
+
+  // 件数が多い一覧（クーポン別売上など）を上位N件+その他にまとめて読みやすくする
+  function topNWithOther(list, n){
+    if (list.length<=n) return list;
+    const top = list.slice(0,n);
+    const rest = list.slice(n);
+    return [...top, {
+      name:`その他(${rest.length}件)`,
+      sales: rest.reduce((s,x)=>s+x.sales,0),
+      count: rest.reduce((s,x)=>s+x.count,0),
+    }];
+  }
+
+  function horizontalBarChart(canvasId, items, label){
+    const fullNames = items.map(i=>i.name);
+    const labels = fullNames.map(n=>truncateLabel(n, 22));
+    const values = items.map(i=>i.sales);
+    chartOrEmpty(canvasId, labels.length>0, canvas => new Chart(canvas, {
+      type:'bar',
+      data:{labels, datasets:[{label, data:values, backgroundColor:getVar('--accent')}]},
+      options:{
+        indexAxis:'y',
+        plugins:{
+          legend:{display:false},
+          tooltip:{callbacks:{title:(items2)=>fullNames[items2[0].dataIndex]}},
+        },
+        scales:{x:{beginAtZero:true, ticks:{color:getVar('--muted')}}, y:{ticks:{color:getVar('--muted')}}},
+      },
+    }));
+  }
+
   function doughnutChart(canvasId, labels, values){
     const palette = [getVar('--accent'), getVar('--accent-2'), getVar('--warn'), getVar('--danger'), '#7c6a9c', '#5b8fa8', '#a87f5b', '#6b9c6f'];
     chartOrEmpty(canvasId, labels.length>0, canvas => new Chart(canvas, {
@@ -1406,7 +1457,7 @@
   function renderMenu(dash){
     const {byMenu, byCoupon, optionStatus} = dash.menu;
     doughnutChart('c-menu', byMenu.map(m=>m.name), byMenu.map(m=>m.sales));
-    barChart('c-coupon', byCoupon.map(c=>c.name), byCoupon.map(c=>c.sales), '売上');
+    horizontalBarChart('c-coupon', topNWithOther(byCoupon, 10), '売上');
     fillTable('option-tbody', optionStatus, 3);
   }
 
