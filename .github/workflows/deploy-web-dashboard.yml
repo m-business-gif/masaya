@@ -2,7 +2,7 @@ name: 売上ダッシュボードの公開
 
 on:
   push:
-    branches: [main]
+    branches: [claude/inventory-management-system-ENHEm]
     paths:
       - 'web-dashboard/**'
   workflow_dispatch:
