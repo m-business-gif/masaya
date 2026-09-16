@@ -7,9 +7,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="vendor/papaparse.min.js"></script>
+<script src="vendor/chart.umd.js"></script>
+<script src="vendor/supabase.umd.js"></script>
 <style>
   :root{
     --ink:#241f22;
@@ -469,11 +469,20 @@
       <div class="field-row"><label>お客様識別（フリガナ等・再来率集計用）</label><select data-field="customerKey"></select></div>
     </div>
 
-    <div class="modal-actions">
+    <div id="upload-step-done" hidden style="text-align:center; padding:24px 8px;">
+      <div style="font-size:2.4rem; margin-bottom:8px;" id="upload-done-icon">✅</div>
+      <h2 id="upload-done-title" style="margin-bottom:8px;">取り込みが完了しました</h2>
+      <p class="hint" id="upload-done-detail"></p>
+    </div>
+
+    <div class="modal-actions" id="upload-actions-default">
       <button class="btn btn-ghost" id="btn-upload-cancel">キャンセル</button>
       <button class="btn" id="btn-upload-back" hidden>戻る</button>
       <button class="btn btn-primary" id="btn-upload-next">次へ</button>
       <button class="btn btn-primary" id="btn-upload-confirm" hidden>取り込む</button>
+    </div>
+    <div class="modal-actions" id="upload-actions-done" hidden style="justify-content:center;">
+      <button class="btn btn-primary" id="btn-upload-close">閉じる</button>
     </div>
   </div>
 </div>
