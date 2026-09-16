@@ -15,12 +15,19 @@
   },
 
   "salesDetail": {
-    "_comment": "「売上管理」＞「売上明細」画面。来店日で期間検索し、カテゴリ列に「クーポン」を含む行のメニュー名を集計する。日付欄への入力方法（テキスト直接入力かカレンダーピッカー必須か）は未検証のため、初回dry-run実行結果で必ず確認すること。",
+    "_comment": "「売上管理」＞「売上明細」画面。来店日で期間検索し、カテゴリ列に「クーポン」を含む行のメニュー名を集計する。検索期間の日付欄はテキスト直接入力不可・クリック式カレンダーピッカー（確認済み）。",
     "navTabSelector": "text=\"売上管理\"",
     "subTabSelector": "text=\"売上明細\"",
     "visitDateRadioSelector": "text=\"来店日\"",
-    "dateFromInput": "REQUIRES_VERIFICATION（検索期間の開始日入力欄。カレンダー欄が2つ並ぶうちの左側）",
-    "dateToInput": "REQUIRES_VERIFICATION（検索期間の終了日入力欄。右側）",
+    "dateFromInput": "text=\"検索期間\" >> xpath=following::input[1]",
+    "dateToInput": "text=\"検索期間\" >> xpath=following::input[2]",
+    "datePicker": {
+      "_comment": "カレンダーピッカーは同時に1つしか開かない前提。年・月の見出しテキストを読み取り「前の月」「次の月」で目的の月まで移動してから日付をクリックする（src/sales.js の pickDate）。",
+      "yearLabelSelector": "text=/^\\d{4}$/",
+      "monthLabelSelector": "text=/^\\d{1,2}月$/",
+      "prevMonthButtonSelector": "text=\"前の月\"",
+      "nextMonthButtonSelector": "text=\"次の月\""
+    },
     "searchButtonSelector": "text=\"検索する\"",
     "rowSelector": "text=\"お客様名\" >> xpath=ancestor::table[1] >> tr:has(td)",
     "categoryInRowSelector": "td:nth-of-type(3)",

@@ -1,7 +1,36 @@
 import { selectors, env } from './config.js';
 
-function formatDate(d) {
-  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+/**
+ * クリック式カレンダーピッカーで日付欄に日付をセットする。
+ * 欄をクリックしてピッカーを開き、見出しの年・月が目的の年月になるまで
+ * 「前の月」「次の月」を押し、最後に日付の数字をクリックする。
+ * ピッカーは同時に1つしか開かない前提（1つずつ順番に処理する）。
+ */
+async function pickDate(page, dateInputSelector, targetDate) {
+  await page.click(dateInputSelector);
+
+  const yearLabel = page.locator(selectors.salesDetail.datePicker.yearLabelSelector).first();
+  const monthLabel = page.locator(selectors.salesDetail.datePicker.monthLabelSelector).first();
+  const prevButton = page.locator(selectors.salesDetail.datePicker.prevMonthButtonSelector);
+  const nextButton = page.locator(selectors.salesDetail.datePicker.nextMonthButtonSelector);
+
+  const targetYm = targetDate.getFullYear() * 12 + targetDate.getMonth();
+
+  for (let i = 0; i < 12; i++) {
+    const year = Number((await yearLabel.textContent()).trim());
+    const month = Number((await monthLabel.textContent()).trim().replace('月', ''));
+    const shownYm = year * 12 + (month - 1);
+
+    if (shownYm === targetYm) break;
+    if (shownYm < targetYm) {
+      await nextButton.click();
+    } else {
+      await prevButton.click();
+    }
+    await page.waitForTimeout(150);
+  }
+
+  await page.locator(`text="${targetDate.getDate()}"`).first().click();
 }
 
 /**
@@ -19,8 +48,8 @@ export async function fetchCouponNamesWithRecentSales(page) {
   await page.waitForLoadState('networkidle');
 
   await page.click(selectors.salesDetail.visitDateRadioSelector);
-  await page.fill(selectors.salesDetail.dateFromInput, formatDate(from));
-  await page.fill(selectors.salesDetail.dateToInput, formatDate(to));
+  await pickDate(page, selectors.salesDetail.dateFromInput, from);
+  await pickDate(page, selectors.salesDetail.dateToInput, to);
 
   await Promise.all([
     page.waitForLoadState('networkidle'),
