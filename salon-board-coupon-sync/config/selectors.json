@@ -6,7 +6,7 @@
     "idInput": "input[type=password] >> xpath=preceding::input[1]",
     "passwordInput": "input[type=password]",
     "submitButton": "text=\"ログイン\"",
-    "successIndicator": "REQUIRES_VERIFICATION（ログイン後の画面のスクリーンショットが必要）"
+    "successIndicator": "text=\"サロン一覧\""
   },
 
   "reservationList": {
