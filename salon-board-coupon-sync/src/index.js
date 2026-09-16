@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { env, assertSelectorsCalibrated } from './config.js';
 import { login } from './login.js';
 import { fetchSalonList, excludeConfiguredSalons } from './salons.js';
-import { fetchCouponNamesWithRecentReservations } from './reservations.js';
+import { fetchCouponNamesWithRecentSales } from './sales.js';
 import { fetchCoupons, computeBoostedOrder, applyOrder } from './coupons.js';
 import { requestReflect } from './publish.js';
 
@@ -16,13 +16,13 @@ function sanitizeFileName(name) {
 async function processSalon(page, salon) {
   await page.goto(salon.url, { waitUntil: 'domcontentloaded' });
 
-  const couponNamesWithReservations = await fetchCouponNamesWithRecentReservations(page);
-  console.log(`  [reservations] 直近${env.lookbackDays}日間に予約のあったクーポン: ${couponNamesWithReservations.size}件`);
+  const couponNamesWithRecentSales = await fetchCouponNamesWithRecentSales(page);
+  console.log(`  [sales] 直近${env.lookbackDays}日間に来店実績のあったクーポン: ${couponNamesWithRecentSales.size}件`);
 
   const coupons = await fetchCoupons(page);
   console.log(`  [coupons] 現在のクーポン数: ${coupons.length}件`);
 
-  const plan = computeBoostedOrder(coupons, couponNamesWithReservations);
+  const plan = computeBoostedOrder(coupons, couponNamesWithRecentSales);
   const orderResult = await applyOrder(page, plan);
 
   if (orderResult.applied) {
