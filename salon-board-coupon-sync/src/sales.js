@@ -6,7 +6,7 @@ import { selectors, env } from './config.js';
  * 「前の月」「次の月」を押し、最後に日付の数字をクリックする。
  * ピッカーは同時に1つしか開かない前提（1つずつ順番に処理する）。
  */
-async function pickDate(page, dateInputSelector, targetDate) {
+export async function pickDate(page, dateInputSelector, targetDate) {
   await page.click(dateInputSelector);
 
   const yearLabel = page.locator(selectors.salesDetail.datePicker.yearLabelSelector).first();

@@ -7,9 +7,13 @@
   "scripts": {
     "reorder": "node src/index.js",
     "reorder:dry-run": "DRY_RUN=true node src/index.js",
-    "codegen": "playwright codegen https://salonboard.com/"
+    "codegen": "playwright codegen https://salonboard.com/",
+    "export:sales": "node src/exportSales.js",
+    "dashboard:mock": "node scripts/generateMockSales.js",
+    "dashboard:serve": "node dashboard/server.js"
   },
   "dependencies": {
+    "express": "^4.21.0",
     "playwright": "^1.48.0"
   }
 }
