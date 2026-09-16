@@ -227,6 +227,7 @@
     </div>
     <div class="topbar-actions">
       <button class="btn" id="btn-settings">目標設定</button>
+      <button class="btn" id="btn-ops-settings">稼働率設定</button>
       <button class="btn btn-primary" id="btn-upload">CSVを取り込む</button>
     </div>
   </div>
@@ -362,6 +363,22 @@
       <div class="panel"><h3>時間帯別来店数</h3><canvas id="c-hourly"></canvas></div>
     </div>
     <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <h3 style="margin:0;">稼働率（今月・売上のあった日を出勤とみなす概算値）</h3>
+        <button class="btn btn-ghost" id="btn-ops-settings-2">設定</button>
+      </div>
+      <div class="stat-grid" style="margin-top:8px;">
+        <div class="stat-card">
+          <div class="label">全体稼働率</div>
+          <div class="value num" id="ops-overall-pct">-</div>
+          <div class="sub" id="ops-overall-detail"></div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table><thead><tr><th>スタッフ</th><th>出勤日数</th><th>稼働時間</th><th>可能時間</th><th>稼働率</th></tr></thead><tbody id="ops-staff-tbody"></tbody></table>
+      </div>
+    </div>
+    <div class="panel">
       <h3>スタッフ別 対応件数（実勤務時間ではありません）</h3>
       <div class="table-wrap"><table><thead><tr><th>スタッフ</th><th>対応件数</th></tr></thead><tbody id="staffvisit-tbody"></tbody></table></div>
     </div>
@@ -375,6 +392,18 @@
         <div class="table-wrap">
           <table><thead><tr><th>継続</th><th>再来率</th><th>対象客数</th></tr></thead><tbody id="visitstep-tbody"></tbody></table>
         </div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>来店周期（全期間・対象月に関わらず集計）</h3>
+      <div class="stat-grid" style="margin-bottom:8px;">
+        <div class="stat-card">
+          <div class="label">平均来店周期</div>
+          <div class="value num" id="interval-avg">-</div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table><thead><tr><th>周期</th><th>件数</th><th>構成比</th></tr></thead><tbody id="interval-tbody"></tbody></table>
       </div>
     </div>
   </section>
@@ -497,6 +526,23 @@
     <div class="modal-actions">
       <button class="btn btn-ghost" id="btn-settings-cancel">閉じる</button>
       <button class="btn btn-primary" id="btn-settings-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Operation (稼働率) settings modal -->
+<div class="modal-backdrop" id="ops-settings-backdrop" hidden>
+  <div class="modal">
+    <h2>稼働率の設定</h2>
+    <p class="hint">売上明細には施術時間の記録がないため、以下の前提で概算します。「区分」が施術の行だけを稼働時間としてカウントし、その日に売上のあったスタッフを1日出勤（下記の時間分、稼働可能）とみなします。</p>
+    <div class="field-row"><label>1人1日の稼働可能時間（時間）</label><input type="number" id="ops-shift-hours" min="1" max="24" step="0.5"></div>
+    <div class="field-row"><label>施術時間の既定値（分）</label><input type="number" id="ops-default-minutes" min="0" step="5"></div>
+    <div class="step-title">カテゴリ別の施術時間（分）</div>
+    <p class="hint">実データに含まれる「施術」区分のカテゴリごとに調整できます。空欄は既定値を使います。</p>
+    <div id="ops-category-fields"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="btn-ops-cancel">閉じる</button>
+      <button class="btn btn-primary" id="btn-ops-save">保存</button>
     </div>
   </div>
 </div>
@@ -689,6 +735,73 @@
       return {from:n, to:n+1, base:atLeastN, rate: atLeastN>0 ? Math.round(atLeastN1/atLeastN*1000)/10 : null};
     });
     return {totalCustomers, distribution, overallReturnRate, stepRates, hasData: totalCustomers>0};
+  }
+
+  // 来店周期：同じお客様の連続する来店日の間隔（日数）を集計する（全期間・対象月に依存しない）。
+  function computeVisitInterval(rows){
+    const visits = dedupeVisits(rows);
+    const byCustomer = new Map();
+    for (const v of visits){
+      if (!v.customerKey || !v.date) continue;
+      if (!byCustomer.has(v.customerKey)) byCustomer.set(v.customerKey, []);
+      byCustomer.get(v.customerKey).push(v.date);
+    }
+    const intervals = [];
+    for (const dates of byCustomer.values()){
+      const sorted = [...new Set(dates)].sort();
+      for (let i=1;i<sorted.length;i++){
+        const days = Math.round((new Date(sorted[i]) - new Date(sorted[i-1])) / 86400000);
+        if (days>0) intervals.push(days);
+      }
+    }
+    const avg = intervals.length ? Math.round(intervals.reduce((a,b)=>a+b,0)/intervals.length) : null;
+    const bucketOf = d => d<=30 ? '30日以内' : d<=60 ? '31〜60日' : d<=90 ? '61〜90日' : '91日以上';
+    const distMap = new Map();
+    for (const d of intervals) distMap.set(bucketOf(d), (distMap.get(bucketOf(d))||0)+1);
+    const distribution = ['30日以内','31〜60日','61〜90日','91日以上'].map(bucket=>{
+      const count = distMap.get(bucket)||0;
+      return {bucket, count, pct: intervals.length ? Math.round(count/intervals.length*1000)/10 : null};
+    });
+    return {avg, count:intervals.length, distribution, hasData: intervals.length>0};
+  }
+
+  // 稼働率：施術区分の行だけを稼働時間としてカウントし、その日に売上のあったスタッフを
+  // 1日出勤（設定した時間だけ稼働可能）とみなして概算する。
+  function calcSlotMinutes(row, opsSettings){
+    if ((row.bucket||'') !== '施術') return 0;
+    const override = opsSettings.categoryMinutes && opsSettings.categoryMinutes[row.category];
+    return (override!==undefined && override!==null && override!=='') ? Number(override) : (opsSettings.defaultSlotMinutes ?? 60);
+  }
+
+  function computeUtilization(rows, opsSettings){
+    const shiftMinutes = (opsSettings.shiftHours ?? 8) * 60;
+    const staffDayKeys = new Set();
+    for (const r of rows){
+      if (!r.staff || !r.date) continue;
+      staffDayKeys.add(`${r.date}|${r.staff}`);
+    }
+    const staffUsed = new Map();
+    let totalUsed = 0;
+    for (const r of rows){
+      const mins = calcSlotMinutes(r, opsSettings);
+      if (mins<=0 || !r.staff) continue;
+      totalUsed += mins;
+      staffUsed.set(r.staff, (staffUsed.get(r.staff)||0)+mins);
+    }
+    const staffDayCount = new Map();
+    for (const key of staffDayKeys){
+      const staff = key.slice(key.indexOf('|')+1);
+      staffDayCount.set(staff, (staffDayCount.get(staff)||0)+1);
+    }
+    const byStaff = [...staffDayCount.keys()].map(staff=>{
+      const days = staffDayCount.get(staff);
+      const available = days*shiftMinutes;
+      const used = staffUsed.get(staff)||0;
+      return {staff, days, available, used, pct: available>0 ? Math.round(used/available*1000)/10 : null};
+    }).sort((a,b)=>(b.pct??0)-(a.pct??0));
+    const totalAvailable = staffDayKeys.size * shiftMinutes;
+    const overallPct = totalAvailable>0 ? Math.round(totalUsed/totalAvailable*1000)/10 : null;
+    return {overallPct, totalUsed, totalAvailable, byStaff, hasData: staffDayKeys.size>0};
   }
 
   function computeDashboard(rows, targets, now){
@@ -1064,6 +1177,7 @@
   let currentRows = [];
   let isSample = true;
   let targets = {default:0, bySalon:{}, lowThresholdPct:70};
+  let opsSettings = {shiftHours:8, defaultSlotMinutes:60, categoryMinutes:{}};
   const renderedViews = new Set();
   const charts = {};
 
@@ -1320,22 +1434,49 @@
       ? staffVisitCounts.map(s=>`<tr><td>${escapeHtml(s.name)}</td><td class="num">${s.count}</td></tr>`).join('')
       : '<tr><td colspan="2">データなし</td></tr>';
 
-    // 来店回数別再来率は月をまたぐ集計のため、対象月フィルターは適用せず店舗/担当のみ反映する
-    const vcStats = computeVisitCountStats(scopedRows());
+    // 稼働率は対象月のみで集計する
+    const thisMonthRows = scopedRows().filter(r=>monthKeyOf(r.date)===dash.period.thisMonth);
+    const ops = computeUtilization(thisMonthRows, opsSettings);
+    $('#ops-overall-pct').textContent = ops.overallPct===null ? '-' : `${ops.overallPct}%`;
+    $('#ops-overall-detail').textContent = ops.hasData
+      ? `稼働 ${Math.round(ops.totalUsed/60).toLocaleString('ja-JP')}時間 / 可能 ${Math.round(ops.totalAvailable/60).toLocaleString('ja-JP')}時間`
+      : 'データなし';
+    $('#ops-staff-tbody').innerHTML = ops.byStaff.length
+      ? ops.byStaff.map(s=>`
+        <tr>
+          <td>${escapeHtml(s.staff)}</td>
+          <td class="num">${s.days}日</td>
+          <td class="num">${Math.round(s.used/60*10)/10}時間</td>
+          <td class="num">${Math.round(s.available/60)}時間</td>
+          <td class="num">${s.pct===null?'-':s.pct+'%'}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="5">データなし</td></tr>';
+
+    // 来店回数別再来率・来店周期は月をまたぐ集計のため、対象月フィルターは適用せず店舗/担当のみ反映する
+    const allRows = scopedRows();
+    const vcStats = computeVisitCountStats(allRows);
     const noteEl = $('#visitcount-note');
     if (!vcStats.hasData){
       noteEl.textContent = 'お客様識別列（フリガナ等）を指定してCSVを取り込むと表示されます。';
       $('#visitcount-tbody').innerHTML = '<tr><td colspan="3">データなし</td></tr>';
       $('#visitstep-tbody').innerHTML = '<tr><td colspan="3">データなし</td></tr>';
-      return;
+    } else {
+      noteEl.textContent = `対象客数 ${vcStats.totalCustomers.toLocaleString('ja-JP')}人・全体再来率 ${vcStats.overallReturnRate}%（お客様名は保存せずハッシュ化して集計しています）`;
+      $('#visitcount-tbody').innerHTML = vcStats.distribution.map(d=>`
+        <tr><td>${d.bucket}</td><td class="num">${d.count.toLocaleString('ja-JP')}人</td><td class="num">${d.pct===null?'-':d.pct+'%'}</td></tr>
+      `).join('');
+      $('#visitstep-tbody').innerHTML = vcStats.stepRates.map(s=>`
+        <tr><td>${s.from}回→${s.to}回目</td><td class="num">${s.rate===null?'-':s.rate+'%'}</td><td class="num">${s.base.toLocaleString('ja-JP')}人</td></tr>
+      `).join('');
     }
-    noteEl.textContent = `対象客数 ${vcStats.totalCustomers.toLocaleString('ja-JP')}人・全体再来率 ${vcStats.overallReturnRate}%（お客様名は保存せずハッシュ化して集計しています）`;
-    $('#visitcount-tbody').innerHTML = vcStats.distribution.map(d=>`
-      <tr><td>${d.bucket}</td><td class="num">${d.count.toLocaleString('ja-JP')}人</td><td class="num">${d.pct===null?'-':d.pct+'%'}</td></tr>
-    `).join('');
-    $('#visitstep-tbody').innerHTML = vcStats.stepRates.map(s=>`
-      <tr><td>${s.from}回→${s.to}回目</td><td class="num">${s.rate===null?'-':s.rate+'%'}</td><td class="num">${s.base.toLocaleString('ja-JP')}人</td></tr>
-    `).join('');
+
+    const ivStats = computeVisitInterval(allRows);
+    $('#interval-avg').textContent = ivStats.avg===null ? '-' : `${ivStats.avg}日`;
+    $('#interval-tbody').innerHTML = ivStats.hasData
+      ? ivStats.distribution.map(d=>`
+        <tr><td>${d.bucket}</td><td class="num">${d.count.toLocaleString('ja-JP')}件</td><td class="num">${d.pct===null?'-':d.pct+'%'}</td></tr>
+      `).join('')
+      : '<tr><td colspan="3">データなし</td></tr>';
   }
 
   /* ---------- tabs ---------- */
@@ -1361,6 +1502,11 @@
     }catch(e){ /* keep defaults */ }
 
     await loadRoyaltySettings();
+
+    try{
+      const osnap = await db.doc('settings/operation').get();
+      if (osnap.exists) opsSettings = Object.assign({shiftHours:8, defaultSlotMinutes:60, categoryMinutes:{}}, osnap.data());
+    }catch(e){ /* keep defaults */ }
 
     try{
       const qs = await db.collection('sales').get();
@@ -1410,6 +1556,45 @@
     $('#settings-backdrop').hidden = true;
     renderAll();
     toast('目標を保存しました');
+  });
+
+  /* ---------- 稼働率設定 ---------- */
+  function treatmentCategories(){
+    return [...new Set(currentRows.filter(r=>(r.bucket||'')==='施術').map(r=>r.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
+  }
+
+  function openOpsSettings(){
+    $('#ops-shift-hours').value = opsSettings.shiftHours ?? 8;
+    $('#ops-default-minutes').value = opsSettings.defaultSlotMinutes ?? 60;
+    const cats = treatmentCategories();
+    $('#ops-category-fields').innerHTML = cats.map(cat=>`
+      <div class="field-row">
+        <label>${escapeHtml(cat)}</label>
+        <input type="number" min="0" step="5" data-category="${escapeHtml(cat)}" value="${(opsSettings.categoryMinutes&&opsSettings.categoryMinutes[cat]!==undefined)?opsSettings.categoryMinutes[cat]:''}" placeholder="既定値を使う">
+      </div>`).join('') || '<p class="hint">まだ施術データがありません。先にCSVを取り込んでください。</p>';
+    $('#ops-settings-backdrop').hidden = false;
+  }
+  $('#btn-ops-settings').addEventListener('click', openOpsSettings);
+  $('#btn-ops-settings-2').addEventListener('click', openOpsSettings);
+  $('#btn-ops-cancel').addEventListener('click', ()=>{ $('#ops-settings-backdrop').hidden = true; });
+  $('#btn-ops-save').addEventListener('click', async ()=>{
+    const categoryMinutes = {};
+    $$('#ops-category-fields input[data-category]').forEach(inp=>{
+      if (inp.value!=='') categoryMinutes[inp.dataset.category] = Number(inp.value);
+    });
+    opsSettings = {
+      shiftHours: Number($('#ops-shift-hours').value)||8,
+      defaultSlotMinutes: Number($('#ops-default-minutes').value)||60,
+      categoryMinutes,
+    };
+    if (db){
+      try{ await db.doc('settings/operation').set(Object.assign({}, opsSettings, {updatedAt:new Date().toISOString()})); }
+      catch(e){ toast('保存に失敗しました。もう一度お試しください。'); }
+    }
+    $('#ops-settings-backdrop').hidden = true;
+    renderedViews.delete('traffic');
+    renderView('traffic');
+    toast('稼働率の設定を保存しました');
   });
 
   /* ---------- upload modal ---------- */
