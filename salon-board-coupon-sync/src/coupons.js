@@ -5,7 +5,9 @@ import { selectors, env } from './config.js';
  * 戻り値: [{ name: string, order: number, rowIndex: number }]
  */
 export async function fetchCoupons(page) {
-  await page.goto(selectors.couponList.url, { waitUntil: 'domcontentloaded' });
+  await page.click(selectors.couponList.navTabSelector);
+  await page.click(selectors.couponList.subTabSelector);
+  await page.waitForLoadState('networkidle');
 
   const rows = page.locator(selectors.couponList.rowSelector);
   const count = await rows.count();

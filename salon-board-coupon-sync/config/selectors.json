@@ -10,7 +10,7 @@
   },
 
   "salonList": {
-    "url": "REQUIRES_VERIFICATION（ログイン直後のサロン一覧ページのURLをアドレスバーからコピー）",
+    "_comment": "ログイン直後は既にこの画面にいるため、URLでの遷移は不要。",
     "rowLinkSelector": "text=\"キレイサロン\" >> xpath=following::table[1]//a"
   },
 
@@ -32,7 +32,6 @@
     "_comment": "推測（スクリーンショットからの解釈、未実機検証）：別画面への遷移はなく、この一覧の「No.」欄（各行1列目の入力欄）を直接書き換えて、右上の「クーポン並び替え登録」ボタンを押すと保存される。保存後に「並び替えが完了しました。」画面が出る。初回のdry-run実行結果で必ず確認すること。",
     "navTabSelector": "text=\"掲載管理\"",
     "subTabSelector": "text=\"クーポン\"",
-    "url": "REQUIRES_VERIFICATION（クーポン掲載情報一覧のURL）",
     "rowSelector": "text=\"クーポン一覧\" >> xpath=following::table[1] >> tr:has(td)",
     "couponNameInRowSelector": "td:nth-of-type(4)",
     "orderInputInRowSelector": "td:nth-of-type(1) input",

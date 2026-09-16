@@ -2,11 +2,10 @@ import { selectors, excludedSalonNamePatterns } from './config.js';
 
 /**
  * サロン一覧画面から、管理対象の全サロン（名前・個別ページURL）を取得する。
+ * ログイン直後は既にサロン一覧画面にいるため、ここでの画面遷移は行わない。
  * 戻り値: [{ name: string, url: string }]
  */
 export async function fetchSalonList(page) {
-  await page.goto(selectors.salonList.url, { waitUntil: 'domcontentloaded' });
-
   const links = page.locator(selectors.salonList.rowLinkSelector);
   const count = await links.count();
 
