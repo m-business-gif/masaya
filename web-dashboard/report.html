@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>業務報告</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<script src="vendor/chart.umd.js"></script>
+<script src="vendor/supabase.umd.js"></script>
+<style>
+  :root{
+    --ink:#241f22;
+    --ink-soft:#5b5257;
+    --muted:#8d8184;
+    --paper:#fbf7f5;
+    --surface:#ffffff;
+    --surface-2:#f4eeec;
+    --line:#e6dcda;
+    --accent:#9c3f56;
+    --accent-ink:#ffffff;
+    --accent-soft:#f3e2e6;
+    --accent-2:#3f7d72;
+    --accent-2-soft:#e2ede9;
+    --warn:#a66a1f;
+    --warn-soft:#f5e8d6;
+    --danger:#b3392f;
+    --danger-soft:#f7e2df;
+    --radius:14px;
+    --radius-sm:9px;
+    --shadow:0 1px 2px rgba(36,31,34,.06), 0 6px 20px -8px rgba(36,31,34,.12);
+    --font-display:'Fraunces', Georgia, serif;
+    --font-body:'Public Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono:'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ink:#f1e9e7; --ink-soft:#cabdb9; --muted:#948885;
+      --paper:#181415; --surface:#221c1e; --surface-2:#2a2224;
+      --line:#3a2f32; --accent:#e592a5; --accent-ink:#241014;
+      --accent-soft:#3a2229; --accent-2:#8bcabd; --accent-2-soft:#1f302c;
+      --warn:#e0ab5f; --warn-soft:#3a2e1a; --danger:#e88a80; --danger-soft:#3a201d;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 6px 24px -8px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ink:#f1e9e7; --ink-soft:#cabdb9; --muted:#948885;
+    --paper:#181415; --surface:#221c1e; --surface-2:#2a2224;
+    --line:#3a2f32; --accent:#e592a5; --accent-ink:#241014;
+    --accent-soft:#3a2229; --accent-2:#8bcabd; --accent-2-soft:#1f302c;
+    --warn:#e0ab5f; --warn-soft:#3a2e1a; --danger:#e88a80; --danger-soft:#3a201d;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 6px 24px -8px rgba(0,0,0,.5);
+  }
+
+  *,*::before,*::after{box-sizing:border-box;}
+  [hidden]{display:none !important;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:var(--font-body); padding-inline:16px;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,h4{font-family:var(--font-display); font-weight:600; margin:0; text-wrap:balance;}
+  .num{font-family:var(--font-mono); font-variant-numeric:tabular-nums;}
+  a{color:inherit;}
+  button{font-family:inherit; cursor:pointer;}
+
+  .shell{max-width:1080px; margin:0 auto; padding-block:20px 48px;}
+
+  .topbar{
+    display:flex; flex-wrap:wrap; gap:14px 20px; align-items:flex-end;
+    justify-content:space-between; padding-bottom:18px; border-bottom:1px solid var(--line);
+    margin-bottom:18px;
+  }
+  .brand-eyebrow{
+    font-size:.72rem; letter-spacing:.09em; text-transform:uppercase; color:var(--accent);
+    font-weight:600; margin-bottom:4px;
+  }
+  .brand h1{font-size:1.6rem;}
+  .topbar-meta{font-size:.82rem; color:var(--muted); margin-top:4px;}
+  .topbar-actions{display:flex; gap:8px; flex-wrap:wrap;}
+  .btn{
+    border:1px solid var(--line); background:var(--surface); color:var(--ink);
+    padding:9px 16px; border-radius:999px; font-size:.86rem; font-weight:600;
+    display:inline-flex; align-items:center; gap:6px; transition:border-color .15s, background .15s;
+    text-decoration:none;
+  }
+  .btn:hover{border-color:var(--accent);}
+  .btn-primary{background:var(--accent); color:var(--accent-ink); border-color:var(--accent);}
+  .btn-primary:hover{opacity:.92;}
+  .btn-ghost{border-color:transparent; background:transparent;}
+  .btn-ghost:hover{background:var(--surface-2);}
+  .btn-sm{padding:5px 12px; font-size:.78rem;}
+
+  .panel{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    padding:18px; box-shadow:var(--shadow); margin-bottom:16px;
+  }
+  .panel h3{font-size:1rem; margin-bottom:14px; font-weight:600; font-family:var(--font-body);}
+  .two-col{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  @media (max-width:760px){.two-col{grid-template-columns:1fr;}}
+
+  table{width:100%; border-collapse:collapse; font-size:.87rem;}
+  th,td{text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:middle;}
+  th{color:var(--muted); font-weight:600; font-size:.72rem; text-transform:uppercase; letter-spacing:.04em;}
+  tbody tr:last-child td{border-bottom:none;}
+  .table-wrap{overflow-x:auto;}
+
+  input[type=text], input[type=number], input[type=date], textarea, select{
+    width:100%; padding:7px 9px; border:1px solid var(--line); border-radius:var(--radius-sm);
+    background:var(--paper); color:var(--ink); font-size:.85rem; font-family:inherit;
+  }
+  textarea{resize:vertical;}
+  input[type=checkbox]{width:17px; height:17px; accent-color:var(--accent); cursor:pointer;}
+  input[type=number]{text-align:right;}
+  .hour-cell{white-space:nowrap; font-weight:600; font-size:.82rem; color:var(--ink-soft);}
+  .hours-input{width:64px;}
+
+  /* Month nav */
+  .month-nav{
+    display:flex; align-items:center; gap:10px; margin-bottom:16px;
+  }
+  .month-label{font-family:var(--font-display); font-size:1.15rem; font-weight:600; min-width:130px; text-align:center;}
+
+  /* KGI banner */
+  .kgi-banner{
+    background:linear-gradient(135deg, var(--accent-2), #2b5b52);
+    color:#fff; display:flex; flex-wrap:wrap; gap:16px; align-items:center; justify-content:space-between;
+  }
+  .kgi-banner .kgi-label{font-size:.72rem; letter-spacing:.08em; text-transform:uppercase; opacity:.85; margin-bottom:6px;}
+  .kgi-banner input[type=text]{
+    background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.35); color:#fff; min-width:280px;
+  }
+  .kgi-banner input[type=text]::placeholder{color:rgba(255,255,255,.7);}
+  .kgi-total{text-align:right;}
+  .kgi-total .label{font-size:.72rem; letter-spacing:.06em; text-transform:uppercase; opacity:.85; margin-bottom:4px;}
+  .kgi-total .value{font-size:1.6rem; font-weight:700;}
+
+  /* Day pills */
+  .day-pills{display:flex; gap:8px; overflow-x:auto; padding-bottom:4px;}
+  .day-pill{
+    flex:0 0 auto; border:1px solid var(--line); border-radius:var(--radius-sm); padding:8px 12px;
+    background:var(--surface); text-align:center; min-width:58px; font-size:.78rem; color:var(--ink-soft);
+  }
+  .day-pill .d{font-weight:700; font-size:.95rem; color:var(--ink);}
+  .day-pill .h{font-size:.7rem; color:var(--accent-2); margin-top:2px;}
+  .day-pill.has-data{border-color:var(--accent-2);}
+  .day-pill.selected{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .day-pill.selected .d, .day-pill.selected .h{color:#fff;}
+  .day-pill.today{box-shadow:0 0 0 2px var(--accent-2-soft) inset;}
+
+  .day-editor-head{display:flex; flex-wrap:wrap; gap:14px; align-items:center; justify-content:space-between; margin-bottom:14px;}
+  .day-editor-head input[type=date]{width:auto;}
+  .day-total{font-size:.9rem; color:var(--ink-soft);}
+  .save-indicator{font-size:.78rem; color:var(--muted);}
+  .save-indicator.saving{color:var(--warn);}
+  .save-indicator.saved{color:var(--accent-2);}
+  .save-indicator.error{color:var(--danger);}
+
+  .todo-cols h4{font-size:.85rem; margin-bottom:8px;}
+  .todo-item{display:flex; align-items:center; gap:8px; margin-bottom:6px;}
+  .todo-item input[type=text]{flex:1;}
+  .todo-remove{background:transparent; border:none; color:var(--danger); font-size:.85rem; padding:2px 6px;}
+
+  .field-block{margin-top:14px;}
+  .field-block label{font-size:.8rem; color:var(--muted); font-weight:600; display:block; margin-bottom:6px;}
+
+  .chart-empty{color:var(--muted); font-size:.85rem; text-align:center; padding:30px 10px;}
+
+  #toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+    background:var(--ink); color:var(--paper); padding:10px 20px; border-radius:999px;
+    font-size:.85rem; box-shadow:var(--shadow); z-index:100; opacity:0; pointer-events:none;
+    transition:opacity .2s, transform .2s;
+  }
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(-6px);}
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <div class="topbar">
+    <div>
+      <div class="brand-eyebrow">Personal Work Report</div>
+      <h1>業務報告</h1>
+      <div class="topbar-meta" id="save-status">読み込み中…</div>
+    </div>
+    <div class="topbar-actions">
+      <a class="btn" href="index.html">📊 売上ダッシュボードへ</a>
+    </div>
+  </div>
+
+  <div class="month-nav">
+    <button class="btn btn-ghost" id="btn-prev-month">‹</button>
+    <div class="month-label" id="month-label">-</div>
+    <button class="btn btn-ghost" id="btn-next-month">›</button>
+    <button class="btn btn-ghost" id="btn-today">今日</button>
+  </div>
+
+  <div class="panel kgi-banner">
+    <div>
+      <div class="kgi-label">KGI（今月の目標）</div>
+      <input type="text" id="kgi-text" placeholder="例）加盟店売上◯◯円 / 新規獲得◯◯件 など">
+    </div>
+    <div class="kgi-total">
+      <div class="label">今月の合計稼働時間</div>
+      <div class="value num" id="month-total-hours">0h</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>日別ログ</h3>
+    <div class="day-pills" id="day-pills"></div>
+  </div>
+
+  <div class="panel">
+    <h3>月間の稼働時間推移</h3>
+    <canvas id="c-month-hours" style="max-height:200px;"></canvas>
+  </div>
+
+  <div class="panel" id="day-editor">
+    <div class="day-editor-head">
+      <input type="date" id="edit-date">
+      <div class="day-total">本日の合計: <span id="day-total-hours" class="num">0h</span></div>
+      <div class="save-indicator" id="save-indicator"></div>
+    </div>
+
+    <div class="table-wrap">
+      <table id="hour-table">
+        <thead>
+          <tr><th style="width:32px;"></th><th style="width:56px;">時刻</th><th>業務内容</th><th>◆今日中</th><th style="width:80px;">時間</th></tr>
+        </thead>
+        <tbody id="hour-tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="two-col todo-cols" style="margin-top:16px;">
+      <div>
+        <h4>TO DO・依頼タスク①</h4>
+        <div id="todos1-list"></div>
+        <button class="btn btn-ghost btn-sm" id="btn-add-todos1">＋追加</button>
+      </div>
+      <div>
+        <h4>TO DO・依頼タスク②</h4>
+        <div id="todos2-list"></div>
+        <button class="btn btn-ghost btn-sm" id="btn-add-todos2">＋追加</button>
+      </div>
+    </div>
+
+    <div class="field-block">
+      <label for="memo-text">メモ</label>
+      <textarea id="memo-text" rows="3"></textarea>
+    </div>
+    <div class="field-block">
+      <label for="output-text">アウトプット</label>
+      <textarea id="output-text" rows="3"></textarea>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+(function(){
+  const $ = sel => document.querySelector(sel);
+  const $$ = sel => Array.from(document.querySelectorAll(sel));
+
+  const SUPABASE_URL = 'https://tfujiecbcmouylvobhiz.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRmdWppZWNiY21vdXlsdm9iaGl6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1NDQ2NDEsImV4cCI6MjEwNTEyMDY0MX0.Da_lRf9Hj2EYlp3YF9DhYE7h80D4mwzyUHYRj06aHxs';
+  const client = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+  const HOURS = Array.from({length:15}, (_, i) => 9 + i); // 9時〜23時
+
+  function pad2(n){ return String(n).padStart(2, '0'); }
+  function toDateStr(d){ return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; }
+  function toMonthStr(d){ return `${d.getFullYear()}-${pad2(d.getMonth()+1)}`; }
+  function daysInMonth(monthStr){
+    const [y, m] = monthStr.split('-').map(Number);
+    return new Date(y, m, 0).getDate();
+  }
+  function dayDocId(dateStr){ return `day-${dateStr}`; }
+  function monthDocId(monthStr){ return `month-${monthStr}`; }
+
+  function emptyDay(dateStr){
+    return {
+      date: dateStr,
+      entries: HOURS.map(h => ({ hour: h, done: false, task: '', today: '', hours: 0 })),
+      todos1: [],
+      todos2: [],
+      memo: '',
+      output: '',
+    };
+  }
+
+  async function fetchDoc(table, id){
+    if (!client) return null;
+    try {
+      const { data, error } = await client.from(table).select('data').eq('id', id).maybeSingle();
+      if (error) { console.error(error); return null; }
+      return data ? data.data : null;
+    } catch (err) {
+      console.error(err);
+      showToast('データベースに接続できませんでした。通信環境をご確認ください。');
+      return null;
+    }
+  }
+  async function saveDoc(table, id, obj){
+    if (!client) return;
+    try {
+      const { error } = await client.from(table).upsert({ id, data: obj, updated_at: new Date().toISOString() });
+      if (error) { console.error(error); setSaveIndicator('error'); }
+    } catch (err) {
+      console.error(err);
+      setSaveIndicator('error');
+      showToast('保存に失敗しました。通信環境をご確認ください。');
+    }
+  }
+  async function fetchDocsByPrefix(table, prefix){
+    if (!client) return [];
+    try {
+      const { data, error } = await client.from(table).select('id, data').gte('id', prefix).lt('id', prefix + '￿');
+      if (error) { console.error(error); return []; }
+      return data || [];
+    } catch (err) {
+      console.error(err);
+      showToast('データベースに接続できませんでした。通信環境をご確認ください。');
+      return [];
+    }
+  }
+
+  function showToast(msg){
+    const el = $('#toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => el.classList.remove('show'), 3200);
+  }
+
+  function dayTotalHours(doc){
+    return (doc.entries || []).reduce((s, e) => s + (Number(e.hours) || 0), 0);
+  }
+
+  const state = {
+    today: new Date(),
+    month: null,
+    date: null,
+    monthDays: {}, // dateStr -> doc (for pills + chart of the current month)
+    current: null, // doc being edited
+    kgi: '',
+    saveTimer: null,
+    loadToken: 0,
+  };
+
+  function setSaveIndicator(mode){
+    const el = $('#save-indicator');
+    if (mode === 'saving'){ el.textContent = '保存中…'; el.className = 'save-indicator saving'; }
+    else if (mode === 'saved'){
+      const now = new Date();
+      el.textContent = `保存済み ${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+      el.className = 'save-indicator saved';
+    } else if (mode === 'error'){
+      el.textContent = '保存できませんでした';
+      el.className = 'save-indicator error';
+    } else { el.textContent = ''; el.className = 'save-indicator'; }
+  }
+
+  function scheduleSave(){
+    setSaveIndicator('saving');
+    if (state.saveTimer) clearTimeout(state.saveTimer);
+    state.saveTimer = setTimeout(async () => {
+      await saveDoc('report_docs', dayDocId(state.current.date), state.current);
+      state.monthDays[state.current.date] = state.current;
+      setSaveIndicator('saved');
+      renderDayPills();
+      renderMonthChart();
+      renderMonthTotal();
+    }, 600);
+  }
+
+  function scheduleKgiSave(){
+    if (state.kgiTimer) clearTimeout(state.kgiTimer);
+    state.kgiTimer = setTimeout(async () => {
+      await saveDoc('report_docs', monthDocId(state.month), { month: state.month, kgi: state.kgi });
+    }, 600);
+  }
+
+  async function loadMonth(monthStr){
+    const token = ++state.loadToken;
+    state.month = monthStr;
+    $('#month-label').textContent = `${monthStr.split('-')[0]}年${Number(monthStr.split('-')[1])}月`;
+
+    const [monthMeta, dayRows] = await Promise.all([
+      fetchDoc('report_docs', monthDocId(monthStr)),
+      fetchDocsByPrefix('report_docs', dayDocId(monthStr + '-')),
+    ]);
+    if (token !== state.loadToken) return; // a newer load started, discard
+
+    state.kgi = (monthMeta && monthMeta.kgi) || '';
+    $('#kgi-text').value = state.kgi;
+
+    state.monthDays = {};
+    dayRows.forEach(row => {
+      if (row.data && row.data.date) state.monthDays[row.data.date] = row.data;
+    });
+
+    renderDayPills();
+    renderMonthChart();
+    renderMonthTotal();
+  }
+
+  function renderMonthTotal(){
+    const total = Object.values(state.monthDays).reduce((s, d) => s + dayTotalHours(d), 0);
+    $('#month-total-hours').textContent = `${Math.round(total * 10) / 10}h`;
+  }
+
+  function renderDayPills(){
+    const wrap = $('#day-pills');
+    wrap.innerHTML = '';
+    const n = daysInMonth(state.month);
+    const todayStr = toDateStr(state.today);
+    for (let d = 1; d <= n; d++){
+      const dateStr = `${state.month}-${pad2(d)}`;
+      const doc = state.monthDays[dateStr];
+      const total = doc ? dayTotalHours(doc) : 0;
+      const pill = document.createElement('button');
+      pill.type = 'button';
+      pill.className = 'day-pill' + (total > 0 ? ' has-data' : '') + (dateStr === state.date ? ' selected' : '') + (dateStr === todayStr ? ' today' : '');
+      pill.innerHTML = `<div class="d">${d}</div><div class="h">${total > 0 ? Math.round(total*10)/10 + 'h' : ''}</div>`;
+      pill.addEventListener('click', () => selectDate(dateStr));
+      wrap.appendChild(pill);
+    }
+  }
+
+  function renderMonthChart(){
+    const canvas = $('#c-month-hours');
+    if (typeof Chart === 'undefined'){
+      canvas.style.display = 'none';
+      if (!canvas.parentElement.querySelector('.chart-empty')){
+        const p = document.createElement('p');
+        p.className = 'chart-empty';
+        p.textContent = 'グラフ描画ライブラリを読み込めませんでした。';
+        canvas.insertAdjacentElement('afterend', p);
+      }
+      return;
+    }
+    const n = daysInMonth(state.month);
+    const labels = [];
+    const values = [];
+    for (let d = 1; d <= n; d++){
+      const dateStr = `${state.month}-${pad2(d)}`;
+      labels.push(String(d));
+      values.push(state.monthDays[dateStr] ? Math.round(dayTotalHours(state.monthDays[dateStr]) * 10) / 10 : 0);
+    }
+    if (window.__monthChart) window.__monthChart.destroy();
+    window.__monthChart = new Chart(canvas, {
+      type: 'bar',
+      data: { labels, datasets: [{ label: '稼働時間', data: values, backgroundColor: '#3f7d72' }] },
+      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+    });
+  }
+
+  async function selectDate(dateStr){
+    state.date = dateStr;
+    $('#edit-date').value = dateStr;
+    const month = dateStr.slice(0, 7);
+    if (month !== state.month){
+      await loadMonth(month);
+    } else {
+      renderDayPills();
+    }
+    let doc = state.monthDays[dateStr];
+    if (!doc){
+      doc = await fetchDoc('report_docs', dayDocId(dateStr));
+      if (!doc) doc = emptyDay(dateStr);
+    }
+    // normalize in case of older/partial docs
+    if (!doc.entries || doc.entries.length !== HOURS.length){
+      const base = emptyDay(dateStr);
+      doc = Object.assign(base, doc, { entries: base.entries });
+    }
+    doc.todos1 = doc.todos1 || [];
+    doc.todos2 = doc.todos2 || [];
+    state.current = doc;
+    renderDayEditor();
+    setSaveIndicator('');
+  }
+
+  function renderDayEditor(){
+    const doc = state.current;
+    const tbody = $('#hour-tbody');
+    tbody.innerHTML = '';
+    doc.entries.forEach((entry, idx) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="checkbox" data-idx="${idx}" class="e-done" ${entry.done ? 'checked' : ''}></td>
+        <td class="hour-cell">${entry.hour}時</td>
+        <td><input type="text" data-idx="${idx}" class="e-task" value="${escapeHtml(entry.task)}"></td>
+        <td><input type="text" data-idx="${idx}" class="e-today" value="${escapeHtml(entry.today)}"></td>
+        <td><input type="number" step="0.25" min="0" data-idx="${idx}" class="e-hours hours-input" value="${entry.hours || ''}"></td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    $$('.e-done').forEach(el => el.addEventListener('change', e => {
+      doc.entries[+e.target.dataset.idx].done = e.target.checked;
+      scheduleSave();
+    }));
+    $$('.e-task').forEach(el => el.addEventListener('input', e => {
+      doc.entries[+e.target.dataset.idx].task = e.target.value;
+      scheduleSave();
+    }));
+    $$('.e-today').forEach(el => el.addEventListener('input', e => {
+      doc.entries[+e.target.dataset.idx].today = e.target.value;
+      scheduleSave();
+    }));
+    $$('.e-hours').forEach(el => el.addEventListener('input', e => {
+      doc.entries[+e.target.dataset.idx].hours = Number(e.target.value) || 0;
+      renderDayTotal();
+      scheduleSave();
+    }));
+
+    renderTodoList('todos1');
+    renderTodoList('todos2');
+    $('#memo-text').value = doc.memo || '';
+    $('#output-text').value = doc.output || '';
+    renderDayTotal();
+  }
+
+  function renderDayTotal(){
+    $('#day-total-hours').textContent = `${Math.round(dayTotalHours(state.current) * 10) / 10}h`;
+  }
+
+  function renderTodoList(key){
+    const list = $(`#${key}-list`);
+    list.innerHTML = '';
+    state.current[key].forEach((item, idx) => {
+      const row = document.createElement('div');
+      row.className = 'todo-item';
+      row.innerHTML = `
+        <input type="checkbox" class="t-done" ${item.done ? 'checked' : ''}>
+        <input type="text" class="t-text" value="${escapeHtml(item.text)}">
+        <button type="button" class="todo-remove">✕</button>
+      `;
+      row.querySelector('.t-done').addEventListener('change', e => {
+        item.done = e.target.checked; scheduleSave();
+      });
+      row.querySelector('.t-text').addEventListener('input', e => {
+        item.text = e.target.value; scheduleSave();
+      });
+      row.querySelector('.todo-remove').addEventListener('click', () => {
+        state.current[key].splice(idx, 1);
+        renderTodoList(key);
+        scheduleSave();
+      });
+      list.appendChild(row);
+    });
+  }
+
+  function escapeHtml(s){
+    return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  $('#btn-add-todos1').addEventListener('click', () => {
+    state.current.todos1.push({ done: false, text: '' });
+    renderTodoList('todos1');
+    scheduleSave();
+  });
+  $('#btn-add-todos2').addEventListener('click', () => {
+    state.current.todos2.push({ done: false, text: '' });
+    renderTodoList('todos2');
+    scheduleSave();
+  });
+  $('#memo-text').addEventListener('input', e => { state.current.memo = e.target.value; scheduleSave(); });
+  $('#output-text').addEventListener('input', e => { state.current.output = e.target.value; scheduleSave(); });
+
+  $('#kgi-text').addEventListener('input', e => { state.kgi = e.target.value; scheduleKgiSave(); });
+
+  $('#edit-date').addEventListener('change', e => {
+    if (e.target.value) selectDate(e.target.value);
+  });
+
+  $('#btn-prev-month').addEventListener('click', () => {
+    const [y, m] = state.month.split('-').map(Number);
+    const d = new Date(y, m - 2, 1);
+    loadMonth(toMonthStr(d));
+  });
+  $('#btn-next-month').addEventListener('click', () => {
+    const [y, m] = state.month.split('-').map(Number);
+    const d = new Date(y, m, 1);
+    loadMonth(toMonthStr(d));
+  });
+  $('#btn-today').addEventListener('click', () => {
+    selectDate(toDateStr(state.today));
+  });
+
+  async function init(){
+    if (!client){
+      $('#save-status').textContent = 'データベースに接続できませんでした。';
+      return;
+    }
+    $('#save-status').textContent = '日々の業務内容・TODO・メモを記録します。入力すると自動的に保存されます。';
+    const todayStr = toDateStr(state.today);
+    await selectDate(todayStr);
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

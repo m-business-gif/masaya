@@ -226,6 +226,7 @@
       <div class="topbar-meta" id="period-meta">読み込み中…</div>
     </div>
     <div class="topbar-actions">
+      <a class="btn" href="report.html">📝 業務報告へ</a>
       <button class="btn" id="btn-settings">目標設定</button>
       <button class="btn" id="btn-ops-settings">稼働率設定</button>
       <button class="btn btn-primary" id="btn-upload">CSVを取り込む</button>
@@ -1696,9 +1697,23 @@
   let parsedHeaders = [];
   let parsedBody = [];
 
+  function showUploadDone(ok, title, detail){
+    $('#upload-step-file').hidden = true;
+    $('#upload-step-map').hidden = true;
+    $('#upload-step-done').hidden = false;
+    $('#upload-done-icon').textContent = ok ? '✅' : '⚠️';
+    $('#upload-done-title').textContent = title;
+    $('#upload-done-detail').textContent = detail || '';
+    $('#upload-actions-default').hidden = true;
+    $('#upload-actions-done').hidden = false;
+  }
+
   $('#btn-upload').addEventListener('click', ()=>{
     $('#upload-step-file').hidden = false;
     $('#upload-step-map').hidden = true;
+    $('#upload-step-done').hidden = true;
+    $('#upload-actions-default').hidden = false;
+    $('#upload-actions-done').hidden = true;
     $('#btn-upload-next').hidden = false;
     $('#btn-upload-confirm').hidden = true;
     $('#btn-upload-back').hidden = true;
@@ -1707,6 +1722,7 @@
     $('#salon-list').innerHTML = knownSalonNames().map(n=>`<option value="${escapeHtml(n)}">`).join('');
     $('#upload-backdrop').hidden = false;
   });
+  $('#btn-upload-close').addEventListener('click', ()=>{ $('#upload-backdrop').hidden = true; });
   $('#btn-upload-cancel').addEventListener('click', ()=>{ $('#upload-backdrop').hidden = true; });
   $('#btn-howto').addEventListener('click', ()=>{
     $('#upload-backdrop').hidden = false;
@@ -1859,9 +1875,8 @@
       // no persistence available in this view; keep in-memory for this session only
       currentRows = isSample ? mapped : currentRows.concat(mapped);
       isSample = false;
-      $('#upload-backdrop').hidden = true;
       renderAll();
-      toast(`${mapped.length}件を取り込みました（この端末のみ・保存はされません）`);
+      showUploadDone(true, '取り込みが完了しました', `${mapped.length}件を取り込みました（この端末のみ・保存はされません）`);
       return;
     }
 
@@ -1874,13 +1889,24 @@
       byKey.get(key).rows.push(r);
     }
 
+    const groups = Array.from(byKey.values());
+    const btnConfirm = $('#btn-upload-confirm');
+    btnConfirm.disabled = true;
+
     let added = 0;
     let failedGroups = [];
-    for (const {salon, month, rows:newRows} of byKey.values()){
+    let done = 0;
+    const withTimeout = (promise, ms) => Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+    ]);
+
+    for (const {salon, month, rows:newRows} of groups){
+      btnConfirm.textContent = `取り込み中…（${done}/${groups.length}）`;
       const salonId = hashId(salon);
       const ref = db.doc(`sales/${salonId}_${month}`);
       try{
-        const snap = await ref.get();
+        const snap = await withTimeout(ref.get(), 20000);
         const existingArrays = snap.exists ? (snap.data().rows||[]) : [];
         const seen = new Set(existingArrays.map(arrayKey));
         const merged = existingArrays.slice();
@@ -1890,18 +1916,21 @@
           if (seen.has(k)) continue;
           seen.add(k); merged.push(arr); added++;
         }
-        await ref.set({salon, month, rows:merged, updatedAt:new Date().toISOString()});
+        await withTimeout(ref.set({salon, month, rows:merged, updatedAt:new Date().toISOString()}), 20000);
       }catch(e){
         failedGroups.push(`${salon}（${month}）`);
       }
+      done++;
     }
+    btnConfirm.disabled = false;
+    btnConfirm.textContent = '取り込む';
 
-    $('#upload-backdrop').hidden = true;
     await bootstrapDb();
     if (failedGroups.length){
-      toast(`${added}件を取り込みましたが、一部保存に失敗しました：${failedGroups.join('、')}（データ量が多すぎる可能性があります。期間を分けてお試しください）`);
+      showUploadDone(false, '一部の取り込みに失敗しました',
+        `${added}件を取り込みましたが、次の店舗は保存できませんでした：${failedGroups.join('、')}（データ量が多すぎる可能性があります。期間を分けてお試しください）`);
     } else {
-      toast(`${added}件を新しく取り込みました`);
+      showUploadDone(true, '取り込みが完了しました', `${added}件を新しく取り込みました`);
     }
   });
 
