@@ -537,8 +537,11 @@
     <p class="hint">売上明細には施術時間の記録がないため、以下の前提で概算します。「区分」が施術の行だけを稼働時間としてカウントし、その日に売上のあったスタッフを1日出勤（下記の時間分、稼働可能）とみなします。</p>
     <div class="field-row"><label>1人1日の稼働可能時間（時間）</label><input type="number" id="ops-shift-hours" min="1" max="24" step="0.5"></div>
     <div class="field-row"><label>施術時間の既定値（分）</label><input type="number" id="ops-default-minutes" min="0" step="5"></div>
-    <div class="step-title">カテゴリ別の施術時間（分）</div>
-    <p class="hint">実データに含まれる「施術」区分のカテゴリごとに調整できます。空欄は既定値を使います。</p>
+    <div class="step-title">メニュー別の施術時間（分）</div>
+    <p class="hint">まつ毛パーマ・眉毛ワックス・眉毛パーマ（メニュー分析と同じ正規化）ごとに施術時間を設定します。空欄は下記の既定値を使います。オプション（指名料など）はここでは扱わず、下の「カテゴリ別」で設定してください。</p>
+    <div id="ops-menu-fields"></div>
+    <div class="step-title">カテゴリ別の施術時間（分・オプションなど）</div>
+    <p class="hint">上記のメニューに該当しない「施術」区分の行（オプションなど）を、実データのカテゴリごとに調整できます。空欄は既定値を使います。</p>
     <div id="ops-category-fields"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" id="btn-ops-cancel">閉じる</button>
@@ -687,6 +690,29 @@
     return 'その他';
   }
 
+  // 稼働率計算用：メニューごとの標準施術時間（分）。眉毛ワックスのみ新規/再来で異なる。
+  const MENU_DEFAULT_MINUTES = {
+    'まつ毛パーマ': 60,
+    '眉毛ワックス_新規': 45,
+    '眉毛ワックス_再来': 30,
+    '眉毛パーマ': 60,
+    'まつ毛パーマ+眉毛ワックス': 75,
+    'まつ毛パーマ+眉毛パーマ': 90,
+  };
+  const MENU_MINUTES_LABELS = {
+    'まつ毛パーマ': 'まつ毛パーマ／パリジェンヌ',
+    '眉毛ワックス_新規': '眉毛ワックス（新規）',
+    '眉毛ワックス_再来': '眉毛ワックス（再来）',
+    '眉毛パーマ': '眉毛パーマ',
+    'まつ毛パーマ+眉毛ワックス': 'まつ毛パーマ＋眉毛ワックス',
+    'まつ毛パーマ+眉毛パーマ': 'まつ毛パーマ＋眉毛パーマ',
+  };
+  function menuMinutesKey(row){
+    const menu = normalizeMenuName(row);
+    if (menu === '眉毛ワックス') return row.customerType === '新規' ? '眉毛ワックス_新規' : '眉毛ワックス_再来';
+    return menu;
+  }
+
   function buildMenu(rows){
     return {
       byMenu: sumBy(rows.filter(r=>classify(r)==='menu'), r=>normalizeMenuName(r)),
@@ -786,6 +812,14 @@
   // 1日出勤（設定した時間だけ稼働可能）とみなして概算する。
   function calcSlotMinutes(row, opsSettings){
     if ((row.bucket||'') !== '施術') return 0;
+    // メニュー本体（まつ毛パーマ・眉毛ワックス・眉毛パーマ等）はメニュー別設定を使う。
+    // オプション（指名料など）は対象外とし、従来通りカテゴリ別設定にフォールバックする。
+    if (classify(row) === 'menu'){
+      const key = menuMinutesKey(row);
+      const override = opsSettings.menuMinutes && opsSettings.menuMinutes[key];
+      if (override !== undefined && override !== null && override !== '') return Number(override);
+      if (MENU_DEFAULT_MINUTES[key] !== undefined) return MENU_DEFAULT_MINUTES[key];
+    }
     const override = opsSettings.categoryMinutes && opsSettings.categoryMinutes[row.category];
     return (override!==undefined && override!==null && override!=='') ? Number(override) : (opsSettings.defaultSlotMinutes ?? 75);
   }
@@ -1194,7 +1228,7 @@
   let currentRows = [];
   let isSample = true;
   let targets = {default:0, bySalon:{}, lowThresholdPct:70};
-  let opsSettings = {shiftHours:8, defaultSlotMinutes:75, categoryMinutes:{}};
+  let opsSettings = {shiftHours:8, defaultSlotMinutes:75, categoryMinutes:{}, menuMinutes:{}};
   const renderedViews = new Set();
   const charts = {};
 
@@ -1602,7 +1636,7 @@
 
     try{
       const osnap = await db.doc('settings/operation').get();
-      if (osnap.exists) opsSettings = Object.assign({shiftHours:8, defaultSlotMinutes:75, categoryMinutes:{}}, osnap.data());
+      if (osnap.exists) opsSettings = Object.assign({shiftHours:8, defaultSlotMinutes:75, categoryMinutes:{}, menuMinutes:{}}, osnap.data());
     }catch(e){ /* keep defaults */ }
 
     try{
@@ -1657,12 +1691,18 @@
 
   /* ---------- 稼働率設定 ---------- */
   function treatmentCategories(){
-    return [...new Set(currentRows.filter(r=>(r.bucket||'')==='施術').map(r=>r.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
+    // メニュー本体（classify==='menu'）は上のメニュー別設定で扱うため、ここではそれ以外（オプション等）のみ対象にする。
+    return [...new Set(currentRows.filter(r=>(r.bucket||'')==='施術' && classify(r)!=='menu').map(r=>r.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
   }
 
   function openOpsSettings(){
     $('#ops-shift-hours').value = opsSettings.shiftHours ?? 8;
     $('#ops-default-minutes').value = opsSettings.defaultSlotMinutes ?? 75;
+    $('#ops-menu-fields').innerHTML = Object.keys(MENU_DEFAULT_MINUTES).map(key=>`
+      <div class="field-row">
+        <label>${escapeHtml(MENU_MINUTES_LABELS[key])}</label>
+        <input type="number" min="0" step="5" data-menu="${escapeHtml(key)}" value="${(opsSettings.menuMinutes&&opsSettings.menuMinutes[key]!==undefined)?opsSettings.menuMinutes[key]:''}" placeholder="既定値 ${MENU_DEFAULT_MINUTES[key]}分">
+      </div>`).join('');
     const cats = treatmentCategories();
     $('#ops-category-fields').innerHTML = cats.map(cat=>`
       <div class="field-row">
@@ -1679,10 +1719,15 @@
     $$('#ops-category-fields input[data-category]').forEach(inp=>{
       if (inp.value!=='') categoryMinutes[inp.dataset.category] = Number(inp.value);
     });
+    const menuMinutes = {};
+    $$('#ops-menu-fields input[data-menu]').forEach(inp=>{
+      if (inp.value!=='') menuMinutes[inp.dataset.menu] = Number(inp.value);
+    });
     opsSettings = {
       shiftHours: Number($('#ops-shift-hours').value)||8,
       defaultSlotMinutes: Number($('#ops-default-minutes').value)||75,
       categoryMinutes,
+      menuMinutes,
     };
     if (db){
       try{ await db.doc('settings/operation').set(Object.assign({}, opsSettings, {updatedAt:new Date().toISOString()})); }
