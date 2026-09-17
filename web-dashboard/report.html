@@ -208,6 +208,7 @@
     <div style="display:flex; gap:8px;">
       <button class="btn btn-ghost" id="btn-google-login">Googleでログイン</button>
       <button class="btn" id="btn-sheet-pull" hidden>⬇️ シートから取り込む</button>
+      <button class="btn" id="btn-sheet-bulk-pull" hidden>📥 今月をまとめて取り込む</button>
       <button class="btn" id="btn-sheet-push" hidden>⬆️ シートに書き出す</button>
     </div>
   </div>
@@ -523,6 +524,43 @@
     }
   }
 
+  async function bulkPullMonth(){
+    const monthStr = state.month;
+    const [y, m] = monthStr.split('-');
+    if (!confirm(`${y}年${Number(m)}月の全日程を、スプレッドシートからまとめて取り込みます。\nアプリ側で入力済みの日は、シートの内容で上書きされます。\n（スプレッドシート側は一切変更しません）\nよろしいですか？`)) return;
+    $('#sync-status').textContent = '月をまとめて取り込み中…';
+    try{
+      const sheetName = sheetTabName(monthStr);
+      const values = await fetchSheetTabValues(sheetName);
+      const n = daysInMonth(monthStr);
+      let imported = 0, skipped = 0;
+      for (let d = 1; d <= n; d++){
+        const dateStr = `${monthStr}-${pad2(d)}`;
+        const startIdx = findDayBlock(values, dateStr);
+        if (startIdx < 0){ skipped++; continue; }
+        const sheetDoc = parseSheetBlock(values, startIdx, dateStr);
+        const existing = state.monthDays[dateStr];
+        sheetDoc.entries.forEach((e, i) => {
+          e.todayDone = !!(existing && existing.entries[i] && existing.entries[i].todayDone);
+        });
+        sheetDoc._syncedAt = new Date().toISOString();
+        await saveDoc('report_docs', dayDocId(dateStr), sheetDoc);
+        state.monthDays[dateStr] = sheetDoc;
+        imported++;
+      }
+      if (state.current && state.current.date.slice(0, 7) === monthStr && state.monthDays[state.current.date]){
+        state.current = state.monthDays[state.current.date];
+        renderDayEditor();
+      }
+      renderDayPills(); renderMonthChart(); renderMonthTotal();
+      $('#sync-status').textContent = `月をまとめて取り込みました（${imported}日分。シートに記入欄が見つからず未対応: ${skipped}日）`;
+    }catch(err){
+      console.error(err);
+      $('#sync-status').textContent = 'まとめて取り込みに失敗しました。ログイン状態と通信環境をご確認ください。';
+      showToast('スプレッドシートからのまとめ取り込みに失敗しました');
+    }
+  }
+
   async function pushToSheet(){
     if (!state.current) return;
     const dateStr = state.current.date;
@@ -549,6 +587,7 @@
       await ensureGoogleToken();
       $('#btn-google-login').hidden = true;
       $('#btn-sheet-pull').hidden = false;
+      $('#btn-sheet-bulk-pull').hidden = false;
       $('#btn-sheet-push').hidden = false;
       $('#sync-status').textContent = `ログインしました。${syncedAtLabel(state.current || {})}`;
     }catch(err){
@@ -559,6 +598,7 @@
     }
   });
   $('#btn-sheet-pull').addEventListener('click', pullFromSheet);
+  $('#btn-sheet-bulk-pull').addEventListener('click', bulkPullMonth);
   $('#btn-sheet-push').addEventListener('click', pushToSheet);
 
   const state = {
