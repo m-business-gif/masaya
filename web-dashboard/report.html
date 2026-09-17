@@ -203,11 +203,12 @@
   <div class="panel" id="sheet-sync-panel" style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between;">
     <div>
       <h3 style="margin-bottom:4px;">スプレッドシート連携</h3>
-      <p class="hint" id="sync-status" style="margin:0; color:var(--muted); font-size:.82rem;">未連携です。ログインすると「山田雅也業務報告シート」の当月分と同期できます（表示中の日のみ）。</p>
+      <p class="hint" id="sync-status" style="margin:0; color:var(--muted); font-size:.82rem;">未連携です。ログインすると「山田雅也業務報告シート」と、表示中の日だけを取り込み／書き出しできます。</p>
     </div>
     <div style="display:flex; gap:8px;">
       <button class="btn btn-ghost" id="btn-google-login">Googleでログイン</button>
-      <button class="btn btn-primary" id="btn-sheet-sync" hidden>この日を同期</button>
+      <button class="btn" id="btn-sheet-pull" hidden>⬇️ シートから取り込む</button>
+      <button class="btn" id="btn-sheet-push" hidden>⬆️ シートに書き出す</button>
     </div>
   </div>
 
@@ -425,20 +426,6 @@
     ];
   }
 
-  function docHasContent(doc){
-    return (doc.entries || []).some(e => e.task || e.today || e.hours) ||
-      (doc.todos1 || []).length > 0 || (doc.todos2 || []).length > 0 ||
-      !!(doc.memo && doc.memo.trim()) || !!(doc.output && doc.output.trim());
-  }
-
-  // 直近の同期以降にこのアプリ側で編集されていれば'push'（アプリ→シート）、
-  // そうでなければ'pull'（シート→アプリ）。シート側の更新時刻はAPIから取得できないための簡易判定。
-  function decideSyncDirection(doc){
-    if (!doc._syncedAt) return docHasContent(doc) ? 'push' : 'pull';
-    if (doc._localUpdatedAt && doc._localUpdatedAt > doc._syncedAt) return 'push';
-    return 'pull';
-  }
-
   const sheetSync = { token: null, tokenClient: null };
 
   function ensureGoogleToken(){
@@ -489,46 +476,71 @@
     });
   }
 
-  async function syncCurrentDay(){
+  function syncedAtLabel(doc){
+    if (!doc._syncedAt) return '';
+    const d = new Date(doc._syncedAt);
+    return `（前回の同期: ${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}）`;
+  }
+
+  // 見つかったブロックの開始行（1始まり）を返す。見つからなければnullを返し、状態は一切変更しない。
+  async function locateBlockOrReport(dateStr){
+    const sheetName = sheetTabName(dateStr.slice(0, 7));
+    const values = await fetchSheetTabValues(sheetName);
+    const startIdx = findDayBlock(values, dateStr);
+    if (startIdx < 0){
+      $('#sync-status').textContent = `シート「${sheetName}」に${dateStr}の記入欄（9〜23時の15行）が見つかりませんでした。シート側で作成してから再度お試しください。`;
+      return null;
+    }
+    return { sheetName, values, startRow: startIdx + 1, startIdx };
+  }
+
+  async function pullFromSheet(){
     if (!state.current) return;
     const dateStr = state.current.date;
-    const sheetName = sheetTabName(dateStr.slice(0, 7));
-    $('#sync-status').textContent = '同期中…';
+    if (!confirm(`スプレッドシートの${dateStr}の内容を取り込みます。\nアプリ側でこの日にすでに入力した内容（業務内容・今日中・TODO・メモ・アウトプット）は上書きされます。\nよろしいですか？`)) return;
+    $('#sync-status').textContent = '取り込み中…';
     try{
-      const values = await fetchSheetTabValues(sheetName);
-      const startIdx = findDayBlock(values, dateStr);
-      if (startIdx < 0){
-        $('#sync-status').textContent = `シート「${sheetName}」に${dateStr}の記入欄（9〜23時の15行）が見つかりませんでした。シート側で作成してから再度お試しください。`;
-        return;
-      }
-      const startRow = startIdx + 1; // 1-based
-      const direction = decideSyncDirection(state.current);
-      if (direction === 'push'){
-        await pushDocToSheet(sheetName, startRow, state.current);
-        $('#sync-status').textContent = `同期しました（アプリ→シート） ${dateStr}`;
-      } else {
-        const sheetDoc = parseSheetBlock(values, startIdx, dateStr);
-        // todayDone（今日中タスクの完了チェック）はシート側に対応する列がないため、
-        // pull時にアプリ側の値を消してしまわないよう引き継ぐ。
-        sheetDoc.entries.forEach((e, i) => { e.todayDone = (state.current.entries[i] || {}).todayDone || false; });
-        state.current.entries = sheetDoc.entries;
-        state.current.todos1 = sheetDoc.todos1;
-        state.current.todos2 = sheetDoc.todos2;
-        state.current.memo = sheetDoc.memo;
-        state.current.output = sheetDoc.output;
-        renderDayEditor();
-        $('#sync-status').textContent = `同期しました（シート→アプリ） ${dateStr}`;
-      }
+      const loc = await locateBlockOrReport(dateStr);
+      if (!loc) return;
+      const sheetDoc = parseSheetBlock(loc.values, loc.startIdx, dateStr);
+      // todayDone（今日中タスクの完了チェック）はシート側に対応する列がないため、アプリ側の値を引き継ぐ。
+      sheetDoc.entries.forEach((e, i) => { e.todayDone = (state.current.entries[i] || {}).todayDone || false; });
+      state.current.entries = sheetDoc.entries;
+      state.current.todos1 = sheetDoc.todos1;
+      state.current.todos2 = sheetDoc.todos2;
+      state.current.memo = sheetDoc.memo;
+      state.current.output = sheetDoc.output;
+      state.current._syncedAt = new Date().toISOString();
+      renderDayEditor();
+      await saveDoc('report_docs', dayDocId(dateStr), state.current);
+      state.monthDays[dateStr] = state.current;
+      renderDayPills(); renderMonthChart(); renderMonthTotal();
+      $('#sync-status').textContent = `取り込みました（シート→アプリ） ${dateStr} ${syncedAtLabel(state.current)}`;
+    }catch(err){
+      console.error(err);
+      $('#sync-status').textContent = '取り込みに失敗しました。ログイン状態と通信環境をご確認ください。';
+      showToast('スプレッドシートからの取り込みに失敗しました');
+    }
+  }
+
+  async function pushToSheet(){
+    if (!state.current) return;
+    const dateStr = state.current.date;
+    if (!confirm(`アプリ側の${dateStr}の内容を、スプレッドシートに書き出します。\nスプレッドシート側ですでに入力されている、この日の業務内容・今日中・TODO・メモ・アウトプットは上書きされます（元に戻せません）。\n本当によろしいですか？`)) return;
+    $('#sync-status').textContent = '書き出し中…';
+    try{
+      const loc = await locateBlockOrReport(dateStr);
+      if (!loc) return;
+      await pushDocToSheet(loc.sheetName, loc.startRow, state.current);
       state.current._syncedAt = new Date().toISOString();
       await saveDoc('report_docs', dayDocId(dateStr), state.current);
       state.monthDays[dateStr] = state.current;
-      renderDayPills();
-      renderMonthChart();
-      renderMonthTotal();
+      renderDayPills(); renderMonthChart(); renderMonthTotal();
+      $('#sync-status').textContent = `書き出しました（アプリ→シート） ${dateStr} ${syncedAtLabel(state.current)}`;
     }catch(err){
       console.error(err);
-      $('#sync-status').textContent = '同期に失敗しました。ログイン状態と通信環境をご確認ください。';
-      showToast('スプレッドシートとの同期に失敗しました');
+      $('#sync-status').textContent = '書き出しに失敗しました。ログイン状態と通信環境をご確認ください。';
+      showToast('スプレッドシートへの書き出しに失敗しました');
     }
   }
 
@@ -536,8 +548,9 @@
     try{
       await ensureGoogleToken();
       $('#btn-google-login').hidden = true;
-      $('#btn-sheet-sync').hidden = false;
-      $('#sync-status').textContent = 'ログインしました。「この日を同期」で表示中の日を同期できます。';
+      $('#btn-sheet-pull').hidden = false;
+      $('#btn-sheet-push').hidden = false;
+      $('#sync-status').textContent = `ログインしました。${syncedAtLabel(state.current || {})}`;
     }catch(err){
       console.error(err);
       $('#sync-status').textContent = GOOGLE_CLIENT_ID
@@ -545,7 +558,8 @@
         : 'Google連携が未設定です（GOOGLE_CLIENT_IDが必要です）。';
     }
   });
-  $('#btn-sheet-sync').addEventListener('click', syncCurrentDay);
+  $('#btn-sheet-pull').addEventListener('click', pullFromSheet);
+  $('#btn-sheet-push').addEventListener('click', pushToSheet);
 
   const state = {
     today: new Date(),
@@ -573,7 +587,6 @@
 
   function scheduleSave(){
     setSaveIndicator('saving');
-    state.current._localUpdatedAt = new Date().toISOString();
     if (state.saveTimer) clearTimeout(state.saveTimer);
     state.saveTimer = setTimeout(async () => {
       await saveDoc('report_docs', dayDocId(state.current.date), state.current);
@@ -691,6 +704,11 @@
     state.current = doc;
     renderDayEditor();
     setSaveIndicator('');
+    if (sheetSync.token){
+      $('#sync-status').textContent = doc._syncedAt
+        ? `この日は連携済みです ${syncedAtLabel(doc)}`
+        : 'この日はまだスプレッドシートと同期していません。';
+    }
   }
 
   function renderDayEditor(){
