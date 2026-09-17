@@ -226,6 +226,7 @@
       <div class="topbar-meta" id="period-meta">読み込み中…</div>
     </div>
     <div class="topbar-actions">
+      <a class="btn" href="report.html">📝 業務報告へ</a>
       <button class="btn" id="btn-settings">目標設定</button>
       <button class="btn" id="btn-ops-settings">稼働率設定</button>
       <button class="btn btn-primary" id="btn-upload">CSVを取り込む</button>
@@ -326,10 +327,8 @@
   <section class="view" id="view-menu">
     <div class="view-title">メニュー分析</div>
     <div class="view-sub">今月のメニュー構成</div>
-    <div class="two-col">
-      <div class="panel"><h3>メニュー別売上構成</h3><canvas id="c-menu"></canvas></div>
-      <div class="panel"><h3>クーポン別売上（上位10件）</h3><canvas id="c-coupon" style="max-height:420px;"></canvas></div>
-    </div>
+    <div class="panel"><h3>メニュー別売上構成</h3><canvas id="c-menu"></canvas></div>
+    <div class="panel"><h3>クーポン別売上（上位10件）</h3><canvas id="c-coupon" style="max-height:460px;"></canvas></div>
     <div class="panel">
       <h3>オプション販売状況</h3>
       <div class="table-wrap"><table><thead><tr><th>オプション名</th><th>売上</th><th>件数</th></tr></thead><tbody id="option-tbody"></tbody></table></div>
@@ -787,7 +786,7 @@
   function calcSlotMinutes(row, opsSettings){
     if ((row.bucket||'') !== '施術') return 0;
     const override = opsSettings.categoryMinutes && opsSettings.categoryMinutes[row.category];
-    return (override!==undefined && override!==null && override!=='') ? Number(override) : (opsSettings.defaultSlotMinutes ?? 60);
+    return (override!==undefined && override!==null && override!=='') ? Number(override) : (opsSettings.defaultSlotMinutes ?? 75);
   }
 
   function computeUtilization(rows, opsSettings){
@@ -1194,7 +1193,7 @@
   let currentRows = [];
   let isSample = true;
   let targets = {default:0, bySalon:{}, lowThresholdPct:70};
-  let opsSettings = {shiftHours:8, defaultSlotMinutes:60, categoryMinutes:{}};
+  let opsSettings = {shiftHours:8, defaultSlotMinutes:75, categoryMinutes:{}};
   const renderedViews = new Set();
   const charts = {};
 
@@ -1248,28 +1247,74 @@
 
   function horizontalBarChart(canvasId, items, label){
     const fullNames = items.map(i=>i.name);
-    const labels = fullNames.map(n=>truncateLabel(n, 22));
+    const labels = fullNames.map(n=>truncateLabel(n, 15));
     const values = items.map(i=>i.sales);
+    const counts = items.map(i=>i.count);
+    const maxVal = Math.max(1, ...values);
+
+    // 各バーの右側に「◯件」を直接描き込む（Chart.js本体には件数表示機能がないため）
+    const countLabelsPlugin = {
+      id: `countLabels-${canvasId}`,
+      afterDatasetsDraw(chart){
+        const meta = chart.getDatasetMeta(0);
+        const ctx = chart.ctx;
+        ctx.save();
+        ctx.fillStyle = getVar('--muted');
+        ctx.font = '11px sans-serif';
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        meta.data.forEach((bar,i)=>{
+          if (counts[i]===undefined) return;
+          ctx.fillText(`${counts[i]}件`, bar.x + 6, bar.y);
+        });
+        ctx.restore();
+      },
+    };
+
     chartOrEmpty(canvasId, labels.length>0, canvas => new Chart(canvas, {
       type:'bar',
       data:{labels, datasets:[{label, data:values, backgroundColor:getVar('--accent')}]},
       options:{
         indexAxis:'y',
+        layout:{padding:{right:48}},
+        scales:{
+          x:{beginAtZero:true, suggestedMax:maxVal*1.12, ticks:{color:getVar('--muted')}},
+          y:{ticks:{color:getVar('--muted'), autoSkip:false}},
+        },
         plugins:{
           legend:{display:false},
-          tooltip:{callbacks:{title:(items2)=>fullNames[items2[0].dataIndex]}},
+          tooltip:{callbacks:{
+            title:(items2)=>fullNames[items2[0].dataIndex],
+            label:(ctx)=>`${yen(ctx.parsed.x)}（${counts[ctx.dataIndex]}件）`,
+          }},
         },
-        scales:{x:{beginAtZero:true, ticks:{color:getVar('--muted')}}, y:{ticks:{color:getVar('--muted')}}},
       },
+      plugins:[countLabelsPlugin],
     }));
   }
 
-  function doughnutChart(canvasId, labels, values){
+  function doughnutChart(canvasId, labels, values, formatValue){
+    formatValue = formatValue || yen;
     const palette = [getVar('--accent'), getVar('--accent-2'), getVar('--warn'), getVar('--danger'), '#7c6a9c', '#5b8fa8', '#a87f5b', '#6b9c6f'];
+    const total = values.reduce((a,b)=>a+b,0);
+    const pctOf = v => total>0 ? Math.round(v/total*1000)/10 : 0;
     chartOrEmpty(canvasId, labels.length>0, canvas => new Chart(canvas, {
       type:'doughnut',
       data:{labels, datasets:[{data:values, backgroundColor:labels.map((_,i)=>palette[i%palette.length])}]},
-      options:{plugins:{legend:{labels:{color:getVar('--ink-soft')}}}}
+      options:{plugins:{
+        legend:{labels:{
+          color:getVar('--ink-soft'),
+          generateLabels: chart => chart.data.labels.map((label,i)=>({
+            text:`${label}（${pctOf(chart.data.datasets[0].data[i])}%）`,
+            fillStyle: chart.data.datasets[0].backgroundColor[i],
+            strokeStyle: chart.data.datasets[0].backgroundColor[i],
+            index:i,
+          })),
+        }},
+        tooltip:{callbacks:{
+          label: ctx => `${ctx.label}: ${formatValue(ctx.parsed)}（${pctOf(ctx.parsed)}%）`,
+        }},
+      }},
     }));
   }
 
@@ -1556,7 +1601,7 @@
 
     try{
       const osnap = await db.doc('settings/operation').get();
-      if (osnap.exists) opsSettings = Object.assign({shiftHours:8, defaultSlotMinutes:60, categoryMinutes:{}}, osnap.data());
+      if (osnap.exists) opsSettings = Object.assign({shiftHours:8, defaultSlotMinutes:75, categoryMinutes:{}}, osnap.data());
     }catch(e){ /* keep defaults */ }
 
     try{
@@ -1616,7 +1661,7 @@
 
   function openOpsSettings(){
     $('#ops-shift-hours').value = opsSettings.shiftHours ?? 8;
-    $('#ops-default-minutes').value = opsSettings.defaultSlotMinutes ?? 60;
+    $('#ops-default-minutes').value = opsSettings.defaultSlotMinutes ?? 75;
     const cats = treatmentCategories();
     $('#ops-category-fields').innerHTML = cats.map(cat=>`
       <div class="field-row">
@@ -1635,7 +1680,7 @@
     });
     opsSettings = {
       shiftHours: Number($('#ops-shift-hours').value)||8,
-      defaultSlotMinutes: Number($('#ops-default-minutes').value)||60,
+      defaultSlotMinutes: Number($('#ops-default-minutes').value)||75,
       categoryMinutes,
     };
     if (db){
@@ -1652,9 +1697,23 @@
   let parsedHeaders = [];
   let parsedBody = [];
 
+  function showUploadDone(ok, title, detail){
+    $('#upload-step-file').hidden = true;
+    $('#upload-step-map').hidden = true;
+    $('#upload-step-done').hidden = false;
+    $('#upload-done-icon').textContent = ok ? '✅' : '⚠️';
+    $('#upload-done-title').textContent = title;
+    $('#upload-done-detail').textContent = detail || '';
+    $('#upload-actions-default').hidden = true;
+    $('#upload-actions-done').hidden = false;
+  }
+
   $('#btn-upload').addEventListener('click', ()=>{
     $('#upload-step-file').hidden = false;
     $('#upload-step-map').hidden = true;
+    $('#upload-step-done').hidden = true;
+    $('#upload-actions-default').hidden = false;
+    $('#upload-actions-done').hidden = true;
     $('#btn-upload-next').hidden = false;
     $('#btn-upload-confirm').hidden = true;
     $('#btn-upload-back').hidden = true;
@@ -1663,6 +1722,7 @@
     $('#salon-list').innerHTML = knownSalonNames().map(n=>`<option value="${escapeHtml(n)}">`).join('');
     $('#upload-backdrop').hidden = false;
   });
+  $('#btn-upload-close').addEventListener('click', ()=>{ $('#upload-backdrop').hidden = true; });
   $('#btn-upload-cancel').addEventListener('click', ()=>{ $('#upload-backdrop').hidden = true; });
   $('#btn-howto').addEventListener('click', ()=>{
     $('#upload-backdrop').hidden = false;
@@ -1815,9 +1875,8 @@
       // no persistence available in this view; keep in-memory for this session only
       currentRows = isSample ? mapped : currentRows.concat(mapped);
       isSample = false;
-      $('#upload-backdrop').hidden = true;
       renderAll();
-      toast(`${mapped.length}件を取り込みました（この端末のみ・保存はされません）`);
+      showUploadDone(true, '取り込みが完了しました', `${mapped.length}件を取り込みました（この端末のみ・保存はされません）`);
       return;
     }
 
@@ -1830,13 +1889,24 @@
       byKey.get(key).rows.push(r);
     }
 
+    const groups = Array.from(byKey.values());
+    const btnConfirm = $('#btn-upload-confirm');
+    btnConfirm.disabled = true;
+
     let added = 0;
     let failedGroups = [];
-    for (const {salon, month, rows:newRows} of byKey.values()){
+    let done = 0;
+    const withTimeout = (promise, ms) => Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+    ]);
+
+    for (const {salon, month, rows:newRows} of groups){
+      btnConfirm.textContent = `取り込み中…（${done}/${groups.length}）`;
       const salonId = hashId(salon);
       const ref = db.doc(`sales/${salonId}_${month}`);
       try{
-        const snap = await ref.get();
+        const snap = await withTimeout(ref.get(), 20000);
         const existingArrays = snap.exists ? (snap.data().rows||[]) : [];
         const seen = new Set(existingArrays.map(arrayKey));
         const merged = existingArrays.slice();
@@ -1846,18 +1916,21 @@
           if (seen.has(k)) continue;
           seen.add(k); merged.push(arr); added++;
         }
-        await ref.set({salon, month, rows:merged, updatedAt:new Date().toISOString()});
+        await withTimeout(ref.set({salon, month, rows:merged, updatedAt:new Date().toISOString()}), 20000);
       }catch(e){
         failedGroups.push(`${salon}（${month}）`);
       }
+      done++;
     }
+    btnConfirm.disabled = false;
+    btnConfirm.textContent = '取り込む';
 
-    $('#upload-backdrop').hidden = true;
     await bootstrapDb();
     if (failedGroups.length){
-      toast(`${added}件を取り込みましたが、一部保存に失敗しました：${failedGroups.join('、')}（データ量が多すぎる可能性があります。期間を分けてお試しください）`);
+      showUploadDone(false, '一部の取り込みに失敗しました',
+        `${added}件を取り込みましたが、次の店舗は保存できませんでした：${failedGroups.join('、')}（データ量が多すぎる可能性があります。期間を分けてお試しください）`);
     } else {
-      toast(`${added}件を新しく取り込みました`);
+      showUploadDone(true, '取り込みが完了しました', `${added}件を新しく取り込みました`);
     }
   });
 
