@@ -467,8 +467,12 @@
     <p class="hint">サロンボードの「売上管理」→「売上明細」でダウンロードしたCSV/Excel(CSV形式)を選択してください。</p>
 
     <div id="upload-step-file">
-      <div class="field-row"><label>店舗名（任意）</label><input type="text" id="in-salon-name" placeholder="CSVに店舗の列がない場合のみ入力" list="salon-list"></div>
-      <datalist id="salon-list"></datalist>
+      <div class="field-row"><label>店舗名（任意）</label>
+        <select id="in-salon-select">
+          <option value="">－ CSVに店舗の列がない場合のみ選択 －</option>
+        </select>
+      </div>
+      <div class="field-row" id="in-salon-name-row" hidden><label>新しい店舗名</label><input type="text" id="in-salon-name" placeholder="店舗名を入力"></div>
       <div class="field-row"><label>CSVファイル</label><input type="file" id="in-file" accept=".csv,text/csv"></div>
       <div class="howto" id="howto-text" hidden>
         <strong>CSVの出し方（目安）</strong>
@@ -1765,8 +1769,19 @@
     $('#btn-upload-back').hidden = true;
     $('#in-file').value = '';
     $('#in-salon-name').value = '';
-    $('#salon-list').innerHTML = knownSalonNames().map(n=>`<option value="${escapeHtml(n)}">`).join('');
+    $('#in-salon-name-row').hidden = true;
+    const names = knownSalonNames();
+    $('#in-salon-select').innerHTML =
+      '<option value="">－ CSVに店舗の列がない場合のみ選択 －</option>' +
+      names.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('') +
+      '<option value="__new__">＋ 新しい店舗名を入力</option>';
     $('#upload-backdrop').hidden = false;
+  });
+  $('#in-salon-select').addEventListener('change', ()=>{
+    const isNew = $('#in-salon-select').value === '__new__';
+    $('#in-salon-name-row').hidden = !isNew;
+    if (isNew) $('#in-salon-name').focus();
+    else $('#in-salon-name').value = '';
   });
   $('#btn-upload-close').addEventListener('click', ()=>{ $('#upload-backdrop').hidden = true; });
   $('#btn-upload-cancel').addEventListener('click', ()=>{ $('#upload-backdrop').hidden = true; });
@@ -1886,7 +1901,8 @@
   function arrayKey(a){ return a.join('|'); }
 
   $('#btn-upload-confirm').addEventListener('click', async ()=>{
-    const manualSalonName = $('#in-salon-name').value.trim();
+    const salonSelectValue = $('#in-salon-select').value;
+    const manualSalonName = salonSelectValue === '__new__' ? $('#in-salon-name').value.trim() : salonSelectValue;
     const idx = {};
     $$('#upload-step-map select[data-field]').forEach(sel=>{ idx[sel.dataset.field] = Number(sel.value); });
 
