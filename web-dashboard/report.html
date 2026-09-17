@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <script src="vendor/chart.umd.js"></script>
 <script src="vendor/supabase.umd.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root{
     --ink:#241f22;
@@ -199,6 +200,17 @@
     <button class="btn btn-ghost" id="btn-today">今日</button>
   </div>
 
+  <div class="panel" id="sheet-sync-panel" style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between;">
+    <div>
+      <h3 style="margin-bottom:4px;">スプレッドシート連携</h3>
+      <p class="hint" id="sync-status" style="margin:0; color:var(--muted); font-size:.82rem;">未連携です。ログインすると「山田雅也業務報告シート」の当月分と同期できます（表示中の日のみ）。</p>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn btn-ghost" id="btn-google-login">Googleでログイン</button>
+      <button class="btn btn-primary" id="btn-sheet-sync" hidden>この日を同期</button>
+    </div>
+  </div>
+
   <div class="panel kgi-banner">
     <div>
       <div class="kgi-label">KGI（今月の目標）</div>
@@ -343,6 +355,195 @@
     return (doc.entries || []).reduce((s, e) => s + (Number(e.hours) || 0), 0);
   }
 
+  /* ---------- Googleスプレッドシート連携 ---------- */
+  // 「山田雅也業務報告シート」（ユーザーが日々手入力しているシート）と、
+  // 手動の「同期」ボタンを押したときだけ双方向に同期する。安全のため、
+  // 現在の月タブ（例：'2026/09'）の、規則正しい15行ブロック（9時〜23時）
+  // に一致する日だけを対象にし、B列（日付）・D列（時刻）・H列（合計）は
+  // 一切書き換えない。
+  const GOOGLE_CLIENT_ID = ''; // TODO: Google CloudでOAuthクライアントIDを発行してここに設定する
+  const REPORT_SPREADSHEET_ID = '1h-bsBXx5xVKBqPKIJoG8gQahFBF9Jb4Dq27XDtbmTZ4';
+  const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
+
+  function sheetTabName(monthStr){ return monthStr.replace('-', '/'); } // '2026-09' -> '2026/09'
+
+  // values: シートのB〜N列（13列）を1行目から取得した二次元配列。1行=シートの実際の行(1始まり)に対応。
+  // 戻り値: 一致するブロックの開始インデックス（0始まり。シート行番号は+1）。見つからなければ-1。
+  function findDayBlock(values, targetDateStr){
+    const m0 = targetDateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m0) return -1;
+    const ty = Number(m0[1]), tm = Number(m0[2]), td = Number(m0[3]);
+    for (let i = 0; i <= values.length - HOURS.length; i++){
+      let ok = true;
+      for (let k = 0; k < HOURS.length; k++){
+        const label = String((values[i + k] || [])[2] || '').trim();
+        if (label !== `${HOURS[k]}時`){ ok = false; break; }
+      }
+      if (!ok) continue;
+      const dateCell = String((values[i] || [])[0] || '');
+      const dm = dateCell.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+      if (!dm) continue;
+      if (Number(dm[1]) === ty && Number(dm[2]) === tm && Number(dm[3]) === td) return i;
+    }
+    return -1;
+  }
+
+  // シートの15行ブロック（0始まりindex）を、このアプリのdoc形式に変換する。
+  function parseSheetBlock(values, startIdx, dateStr){
+    const entries = HOURS.map((hour, k) => {
+      const row = values[startIdx + k] || [];
+      return { hour, done: row[1] === 'TRUE', task: row[3] || '', today: row[4] || '', hours: Number(row[5]) || 0 };
+    });
+    const todos1 = [];
+    const todos2 = [];
+    for (let k = 0; k < HOURS.length; k++){
+      const row = values[startIdx + k] || [];
+      if (String(row[8] || '').trim()) todos1.push({ done: row[7] === 'TRUE', text: row[8] });
+      if (String(row[10] || '').trim()) todos2.push({ done: row[9] === 'TRUE', text: row[10] });
+    }
+    const first = values[startIdx] || [];
+    return { date: dateStr, entries, todos1, todos2, memo: first[11] || '', output: first[12] || '' };
+  }
+
+  // このアプリのdocを、シートに書き戻すための値レンジ（C・E〜G・I〜L・M〜N列のみ）に変換する。
+  // B・D・H列（日付・時刻ラベル・合計欄）には一切触れない。
+  function buildPushValueRanges(sheetName, startRow, doc){
+    const q = a1 => `'${sheetName}'!${a1}`;
+    const endRow = startRow + HOURS.length - 1;
+    const doneCol = doc.entries.map(e => [e.done ? 'TRUE' : 'FALSE']);
+    const taskCols = doc.entries.map(e => [e.task || '', e.today || '', e.hours || 0]);
+    const todoCols = HOURS.map((_, i) => {
+      const t1 = doc.todos1[i];
+      const t2 = doc.todos2[i];
+      return [t1 ? (t1.done ? 'TRUE' : 'FALSE') : '', t1 ? (t1.text || '') : '', t2 ? (t2.done ? 'TRUE' : 'FALSE') : '', t2 ? (t2.text || '') : ''];
+    });
+    return [
+      { range: q(`C${startRow}:C${endRow}`), values: doneCol },
+      { range: q(`E${startRow}:G${endRow}`), values: taskCols },
+      { range: q(`I${startRow}:L${endRow}`), values: todoCols },
+      { range: q(`M${startRow}:N${startRow}`), values: [[doc.memo || '', doc.output || '']] },
+    ];
+  }
+
+  function docHasContent(doc){
+    return (doc.entries || []).some(e => e.task || e.today || e.hours) ||
+      (doc.todos1 || []).length > 0 || (doc.todos2 || []).length > 0 ||
+      !!(doc.memo && doc.memo.trim()) || !!(doc.output && doc.output.trim());
+  }
+
+  // 直近の同期以降にこのアプリ側で編集されていれば'push'（アプリ→シート）、
+  // そうでなければ'pull'（シート→アプリ）。シート側の更新時刻はAPIから取得できないための簡易判定。
+  function decideSyncDirection(doc){
+    if (!doc._syncedAt) return docHasContent(doc) ? 'push' : 'pull';
+    if (doc._localUpdatedAt && doc._localUpdatedAt > doc._syncedAt) return 'push';
+    return 'pull';
+  }
+
+  const sheetSync = { token: null, tokenClient: null };
+
+  function ensureGoogleToken(){
+    return new Promise((resolve, reject) => {
+      if (!GOOGLE_CLIENT_ID){ reject(new Error('GOOGLE_CLIENT_ID未設定')); return; }
+      if (sheetSync.token){ resolve(sheetSync.token); return; }
+      if (typeof google === 'undefined' || !google.accounts){ reject(new Error('Google連携ライブラリを読み込めませんでした')); return; }
+      if (!sheetSync.tokenClient){
+        sheetSync.tokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: GOOGLE_CLIENT_ID,
+          scope: SHEETS_SCOPE,
+          callback: () => {}, // 呼び出しごとに上書きする
+        });
+      }
+      sheetSync.tokenClient.callback = (resp) => {
+        if (resp.error){ reject(new Error(resp.error)); return; }
+        sheetSync.token = resp.access_token;
+        resolve(sheetSync.token);
+      };
+      sheetSync.tokenClient.requestAccessToken();
+    });
+  }
+
+  async function sheetsApiFetch(path, options){
+    const token = await ensureGoogleToken();
+    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${REPORT_SPREADSHEET_ID}${path}`, {
+      ...options,
+      headers: { ...(options && options.headers), Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok){
+      if (res.status === 401){ sheetSync.token = null; }
+      throw new Error(`Sheets API error ${res.status}`);
+    }
+    return res.json();
+  }
+
+  async function fetchSheetTabValues(sheetName){
+    const range = encodeURIComponent(`'${sheetName}'!B1:N500`);
+    const data = await sheetsApiFetch(`/values/${range}?valueRenderOption=FORMATTED_VALUE`, { method: 'GET' });
+    return data.values || [];
+  }
+
+  async function pushDocToSheet(sheetName, startRow, doc){
+    await sheetsApiFetch('/values:batchUpdate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data: buildPushValueRanges(sheetName, startRow, doc) }),
+    });
+  }
+
+  async function syncCurrentDay(){
+    if (!state.current) return;
+    const dateStr = state.current.date;
+    const sheetName = sheetTabName(dateStr.slice(0, 7));
+    $('#sync-status').textContent = '同期中…';
+    try{
+      const values = await fetchSheetTabValues(sheetName);
+      const startIdx = findDayBlock(values, dateStr);
+      if (startIdx < 0){
+        $('#sync-status').textContent = `シート「${sheetName}」に${dateStr}の記入欄（9〜23時の15行）が見つかりませんでした。シート側で作成してから再度お試しください。`;
+        return;
+      }
+      const startRow = startIdx + 1; // 1-based
+      const direction = decideSyncDirection(state.current);
+      if (direction === 'push'){
+        await pushDocToSheet(sheetName, startRow, state.current);
+        $('#sync-status').textContent = `同期しました（アプリ→シート） ${dateStr}`;
+      } else {
+        const sheetDoc = parseSheetBlock(values, startIdx, dateStr);
+        state.current.entries = sheetDoc.entries;
+        state.current.todos1 = sheetDoc.todos1;
+        state.current.todos2 = sheetDoc.todos2;
+        state.current.memo = sheetDoc.memo;
+        state.current.output = sheetDoc.output;
+        renderDayEditor();
+        $('#sync-status').textContent = `同期しました（シート→アプリ） ${dateStr}`;
+      }
+      state.current._syncedAt = new Date().toISOString();
+      await saveDoc('report_docs', dayDocId(dateStr), state.current);
+      state.monthDays[dateStr] = state.current;
+      renderDayPills();
+      renderMonthChart();
+      renderMonthTotal();
+    }catch(err){
+      console.error(err);
+      $('#sync-status').textContent = '同期に失敗しました。ログイン状態と通信環境をご確認ください。';
+      showToast('スプレッドシートとの同期に失敗しました');
+    }
+  }
+
+  $('#btn-google-login').addEventListener('click', async () => {
+    try{
+      await ensureGoogleToken();
+      $('#btn-google-login').hidden = true;
+      $('#btn-sheet-sync').hidden = false;
+      $('#sync-status').textContent = 'ログインしました。「この日を同期」で表示中の日を同期できます。';
+    }catch(err){
+      console.error(err);
+      $('#sync-status').textContent = GOOGLE_CLIENT_ID
+        ? 'ログインに失敗しました。'
+        : 'Google連携が未設定です（GOOGLE_CLIENT_IDが必要です）。';
+    }
+  });
+  $('#btn-sheet-sync').addEventListener('click', syncCurrentDay);
+
   const state = {
     today: new Date(),
     month: null,
@@ -369,6 +570,7 @@
 
   function scheduleSave(){
     setSaveIndicator('saving');
+    state.current._localUpdatedAt = new Date().toISOString();
     if (state.saveTimer) clearTimeout(state.saveTimer);
     state.saveTimer = setTimeout(async () => {
       await saveDoc('report_docs', dayDocId(state.current.date), state.current);
