@@ -242,7 +242,7 @@
     <div class="table-wrap">
       <table id="hour-table">
         <thead>
-          <tr><th style="width:32px;"></th><th style="width:56px;">時刻</th><th>業務内容</th><th>◆今日中</th><th style="width:80px;">時間</th></tr>
+          <tr><th style="width:32px;"></th><th style="width:56px;">時刻</th><th>業務内容</th><th style="width:32px;"></th><th>◆今日中</th><th style="width:80px;">時間</th></tr>
         </thead>
         <tbody id="hour-tbody"></tbody>
       </table>
@@ -299,7 +299,7 @@
   function emptyDay(dateStr){
     return {
       date: dateStr,
-      entries: HOURS.map(h => ({ hour: h, done: false, task: '', today: '', hours: 0 })),
+      entries: HOURS.map(h => ({ hour: h, done: false, task: '', today: '', todayDone: false, hours: 0 })),
       todos1: [],
       todos2: [],
       memo: '',
@@ -508,6 +508,9 @@
         $('#sync-status').textContent = `同期しました（アプリ→シート） ${dateStr}`;
       } else {
         const sheetDoc = parseSheetBlock(values, startIdx, dateStr);
+        // todayDone（今日中タスクの完了チェック）はシート側に対応する列がないため、
+        // pull時にアプリ側の値を消してしまわないよう引き継ぐ。
+        sheetDoc.entries.forEach((e, i) => { e.todayDone = (state.current.entries[i] || {}).todayDone || false; });
         state.current.entries = sheetDoc.entries;
         state.current.todos1 = sheetDoc.todos1;
         state.current.todos2 = sheetDoc.todos2;
@@ -700,6 +703,7 @@
         <td><input type="checkbox" data-idx="${idx}" class="e-done" ${entry.done ? 'checked' : ''}></td>
         <td class="hour-cell">${entry.hour}時</td>
         <td><input type="text" data-idx="${idx}" class="e-task" value="${escapeHtml(entry.task)}"></td>
+        <td><input type="checkbox" data-idx="${idx}" class="e-today-done" ${entry.todayDone ? 'checked' : ''}></td>
         <td><input type="text" data-idx="${idx}" class="e-today" value="${escapeHtml(entry.today)}"></td>
         <td><input type="number" step="0.25" min="0" data-idx="${idx}" class="e-hours hours-input" value="${entry.hours || ''}"></td>
       `;
@@ -712,6 +716,10 @@
     }));
     $$('.e-task').forEach(el => el.addEventListener('input', e => {
       doc.entries[+e.target.dataset.idx].task = e.target.value;
+      scheduleSave();
+    }));
+    $$('.e-today-done').forEach(el => el.addEventListener('change', e => {
+      doc.entries[+e.target.dataset.idx].todayDone = e.target.checked;
       scheduleSave();
     }));
     $$('.e-today').forEach(el => el.addEventListener('input', e => {
