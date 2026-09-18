@@ -266,6 +266,7 @@
     <button class="tab" data-view="products">物販分析</button>
     <button class="tab" data-view="traffic">客数・稼働分析</button>
     <button class="tab" data-view="royalty">ロイヤリティ</button>
+    <button class="tab" data-view="pl">PL</button>
   </nav>
 
   <!-- 1. Summary -->
@@ -427,6 +428,53 @@
     </div>
   </section>
 
+  <!-- 6. PL -->
+  <section class="view" id="view-pl">
+    <div class="view-title">店舗別PL（損益）</div>
+    <div class="view-sub">売上・原価・人件費・ロイヤリティ・固定費から店舗ごとの営業利益を概算します（概算値・実際の数値と合わせて設定を調整してください）</div>
+    <div class="stat-grid" id="pl-total-stats"></div>
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+        <h3 style="margin:0;">店舗別PL</h3>
+        <button class="btn" id="btn-pl-settings">PL設定</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>店舗</th><th>売上</th><th>原価</th><th>人件費</th><th>ロイヤリティ</th><th>固定費</th><th>営業利益</th><th>利益率</th></tr></thead>
+          <tbody id="pl-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- PL settings modal -->
+<div class="modal-backdrop" id="pl-settings-backdrop" hidden>
+  <div class="modal" style="max-width:720px;">
+    <h2>PL設定</h2>
+    <p class="hint">売上明細だけでは分からない「原価」「人件費」「固定費」を、下記の率・金額から概算します。実際の数値に合わせて調整してください。</p>
+    <div class="step-title">原価率（%・カテゴリ別）</div>
+    <div class="field-row"><label>物販</label><input type="number" id="pl-cogs-product" min="0" max="100" step="1"></div>
+    <div class="field-row"><label>オプション</label><input type="number" id="pl-cogs-option" min="0" max="100" step="1"></div>
+    <div class="field-row"><label>施術（メニュー）</label><input type="number" id="pl-cogs-menu" min="0" max="100" step="1"></div>
+    <div class="step-title">人件費（個人売上に対する歩合率・%）</div>
+    <div class="field-row"><label>既定の歩合率</label><input type="number" id="pl-labor-default" min="0" max="100" step="1"></div>
+    <p class="hint">担当者ごとに歩合率が異なる場合は、下記で個別に設定できます。空欄は既定値を使います。</p>
+    <div id="pl-labor-staff-fields"></div>
+    <div class="step-title">店舗別固定費（円/月）</div>
+    <p class="hint">家賃・固定人件費・その他固定費を店舗ごとに入力してください。空欄は0円として扱います。</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>店舗</th><th>家賃</th><th>固定人件費</th><th>その他</th></tr></thead>
+        <tbody id="pl-fixed-tbody"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="btn-pl-cancel">閉じる</button>
+      <button class="btn btn-primary" id="btn-pl-save">保存</button>
+    </div>
+  </div>
 </div>
 
 <!-- Royalty rule edit modal -->
@@ -916,6 +964,44 @@
     return {base, amount};
   }
 
+  // 店舗別PL（概算）：売上明細だけでは分からない原価・人件費・固定費を、
+  // カテゴリ別原価率・スタッフ別歩合率・店舗別固定費（いずれも手入力）から概算する。
+  // ロイヤリティは既存のロイヤリティ計算エンジンをそのまま利用する。
+  function computePLForSalon(salon, rows, plSettings, royaltyRules){
+    const revenue = rows.reduce((s,r)=>s+(r.amount||0), 0);
+    const byClass = {product:0, option:0, menu:0};
+    for (const r of rows){
+      const c = classify(r);
+      if (byClass[c] !== undefined) byClass[c] += (r.amount||0);
+    }
+    const rates = plSettings.cogsRates || {};
+    const cogs = byClass.product*(Number(rates.product)||0)/100
+      + byClass.option*(Number(rates.option)||0)/100
+      + byClass.menu*(Number(rates.menu)||0)/100;
+
+    const staffSales = new Map();
+    for (const r of rows){
+      if (!r.staff) continue;
+      staffSales.set(r.staff, (staffSales.get(r.staff)||0) + (r.amount||0));
+    }
+    let labor = 0;
+    for (const [staff, sales] of staffSales){
+      const override = plSettings.laborRateByStaff && plSettings.laborRateByStaff[staff];
+      const rate = (override!==undefined && override!==null && override!=='') ? Number(override) : (Number(plSettings.laborRate)||0);
+      labor += sales * rate/100;
+    }
+
+    const rule = royaltyRules.find(r=>r.matchedSalon===salon);
+    const royalty = rule ? calcRoyalty(rule, rows).amount : 0;
+
+    const fc = (plSettings.fixedCostsBySalon && plSettings.fixedCostsBySalon[salon]) || {};
+    const fixed = (Number(fc.rent)||0) + (Number(fc.fixedLabor)||0) + (Number(fc.other)||0);
+
+    const operatingProfit = revenue - cogs - labor - royalty - fixed;
+    const margin = revenue>0 ? Math.round(operatingProfit/revenue*1000)/10 : null;
+    return {salon, revenue, cogs, labor, royalty, fixed, operatingProfit, margin};
+  }
+
   // 提示されたロイヤリティ条件からの初期設定（キーワードで店舗を推測、複数候補や未記載のものは
   // 手動確認が必要な旨を備考に記載）。金額に影響する解釈（税込/税別、崖式/超過分のみ）は
   // ユーザー確認済みの前提: 「10%(150万円以上15%)」のような省略表記は崖式（全体に適用）。
@@ -1062,6 +1148,101 @@
       btn.addEventListener('click', ()=>openRoyaltyEdit(btn.dataset.editRule));
     });
   }
+
+  function renderPL(){
+    refreshRoyaltyMatches();
+
+    const month = $('#filter-month').value;
+    const monthRows = currentRows.filter(r=>monthKeyOf(r.date)===month);
+    const salons = distinctValues(monthRows, 'salon');
+    const results = salons
+      .map(salon => computePLForSalon(salon, monthRows.filter(r=>r.salon===salon), plSettings, royaltyRules))
+      .sort((a,b)=>b.revenue-a.revenue);
+
+    const totals = results.reduce((acc,r)=>{
+      acc.revenue+=r.revenue; acc.cogs+=r.cogs; acc.labor+=r.labor;
+      acc.royalty+=r.royalty; acc.fixed+=r.fixed; acc.operatingProfit+=r.operatingProfit;
+      return acc;
+    }, {revenue:0, cogs:0, labor:0, royalty:0, fixed:0, operatingProfit:0});
+    const totalMargin = totals.revenue>0 ? Math.round(totals.operatingProfit/totals.revenue*1000)/10 : null;
+
+    $('#pl-total-stats').innerHTML = `
+      <div class="stat-card"><div class="label">全店舗 売上</div><div class="value num">${yen(totals.revenue)}</div></div>
+      <div class="stat-card"><div class="label">全店舗 営業利益</div><div class="value num">${yen(totals.operatingProfit)}</div></div>
+      <div class="stat-card"><div class="label">全店舗 利益率</div><div class="value num">${totalMargin===null?'-':totalMargin+'%'}</div></div>
+    `;
+
+    $('#pl-tbody').innerHTML = results.map(r=>`
+      <tr>
+        <td>${escapeHtml(r.salon)}</td>
+        <td class="num">${yen(r.revenue)}</td>
+        <td class="num">${yen(r.cogs)}</td>
+        <td class="num">${yen(r.labor)}</td>
+        <td class="num">${yen(r.royalty)}</td>
+        <td class="num">${yen(r.fixed)}</td>
+        <td class="num" style="font-weight:600; color:${r.operatingProfit>=0?'var(--accent-2)':'var(--danger)'};">${yen(r.operatingProfit)}</td>
+        <td class="num">${r.margin===null?'-':r.margin+'%'}</td>
+      </tr>`).join('') || '<tr><td colspan="8">データなし</td></tr>';
+  }
+
+  function openPLSettings(){
+    $('#pl-cogs-product').value = (plSettings.cogsRates && plSettings.cogsRates.product) ?? '';
+    $('#pl-cogs-option').value = (plSettings.cogsRates && plSettings.cogsRates.option) ?? '';
+    $('#pl-cogs-menu').value = (plSettings.cogsRates && plSettings.cogsRates.menu) ?? '';
+    $('#pl-labor-default').value = plSettings.laborRate ?? '';
+
+    const staffs = distinctValues(currentRows, 'staff');
+    $('#pl-labor-staff-fields').innerHTML = staffs.map(name=>`
+      <div class="field-row">
+        <label>${escapeHtml(name)}</label>
+        <input type="number" min="0" max="100" step="1" data-staff="${escapeHtml(name)}" value="${(plSettings.laborRateByStaff&&plSettings.laborRateByStaff[name]!==undefined)?plSettings.laborRateByStaff[name]:''}" placeholder="既定値を使う">
+      </div>`).join('') || '<p class="hint">まだスタッフのデータがありません。先にCSVを取り込んでください。</p>';
+
+    const salons = distinctValues(currentRows, 'salon');
+    $('#pl-fixed-tbody').innerHTML = salons.map(salon=>{
+      const fc = (plSettings.fixedCostsBySalon && plSettings.fixedCostsBySalon[salon]) || {};
+      return `<tr>
+        <td>${escapeHtml(salon)}</td>
+        <td><input type="number" min="0" step="1000" data-salon="${escapeHtml(salon)}" data-field="rent" value="${fc.rent??''}"></td>
+        <td><input type="number" min="0" step="1000" data-salon="${escapeHtml(salon)}" data-field="fixedLabor" value="${fc.fixedLabor??''}"></td>
+        <td><input type="number" min="0" step="1000" data-salon="${escapeHtml(salon)}" data-field="other" value="${fc.other??''}"></td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="4">まだ店舗データがありません。先にCSVを取り込んでください。</td></tr>';
+
+    $('#pl-settings-backdrop').hidden = false;
+  }
+  $('#btn-pl-settings').addEventListener('click', openPLSettings);
+  $('#btn-pl-cancel').addEventListener('click', ()=>{ $('#pl-settings-backdrop').hidden = true; });
+  $('#btn-pl-save').addEventListener('click', async ()=>{
+    const laborRateByStaff = {};
+    $$('#pl-labor-staff-fields input[data-staff]').forEach(inp=>{
+      if (inp.value!=='') laborRateByStaff[inp.dataset.staff] = Number(inp.value);
+    });
+    const fixedCostsBySalon = {};
+    $$('#pl-fixed-tbody input[data-salon]').forEach(inp=>{
+      const salon = inp.dataset.salon;
+      if (!fixedCostsBySalon[salon]) fixedCostsBySalon[salon] = {};
+      fixedCostsBySalon[salon][inp.dataset.field] = inp.value!=='' ? Number(inp.value) : 0;
+    });
+    plSettings = {
+      cogsRates: {
+        product: Number($('#pl-cogs-product').value)||0,
+        option: Number($('#pl-cogs-option').value)||0,
+        menu: Number($('#pl-cogs-menu').value)||0,
+      },
+      laborRate: Number($('#pl-labor-default').value)||0,
+      laborRateByStaff,
+      fixedCostsBySalon,
+    };
+    if (db){
+      try{ await db.doc('settings/pl').set(Object.assign({}, plSettings, {updatedAt:new Date().toISOString()})); }
+      catch(e){ toast('保存に失敗しました。もう一度お試しください。'); }
+    }
+    $('#pl-settings-backdrop').hidden = true;
+    renderedViews.delete('pl');
+    renderView('pl');
+    toast('PL設定を保存しました');
+  });
 
   function tierRowHtml(t, i){
     return `<div class="tier-row" data-tier-index="${i}">
@@ -1233,6 +1414,7 @@
   let isSample = true;
   let targets = {default:0, bySalon:{}, lowThresholdPct:70};
   let opsSettings = {shiftHours:8, defaultSlotMinutes:75, categoryMinutes:{}, menuMinutes:{}};
+  let plSettings = {cogsRates:{product:0, option:0, menu:0}, laborRate:0, laborRateByStaff:{}, fixedCostsBySalon:{}};
   const renderedViews = new Set();
   const charts = {};
 
@@ -1481,6 +1663,7 @@
     if (view==='products') renderProducts(dash);
     if (view==='traffic') renderTraffic(dash);
     if (view==='royalty') renderRoyalty();
+    if (view==='pl') renderPL();
   }
 
   function renderSummary(dash){
@@ -1641,6 +1824,11 @@
     try{
       const osnap = await db.doc('settings/operation').get();
       if (osnap.exists) opsSettings = Object.assign({shiftHours:8, defaultSlotMinutes:75, categoryMinutes:{}, menuMinutes:{}}, osnap.data());
+    }catch(e){ /* keep defaults */ }
+
+    try{
+      const plsnap = await db.doc('settings/pl').get();
+      if (plsnap.exists) plSettings = Object.assign({cogsRates:{product:0, option:0, menu:0}, laborRate:0, laborRateByStaff:{}, fixedCostsBySalon:{}}, plsnap.data());
     }catch(e){ /* keep defaults */ }
 
     try{
