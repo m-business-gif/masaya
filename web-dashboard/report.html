@@ -625,27 +625,63 @@
     } else { el.textContent = ''; el.className = 'save-indicator'; }
   }
 
+  // scheduleSave/scheduleKgiSave はデバウンス中に日付・月を切り替えられても正しい保存先に
+  // 書き込めるよう、対象のdocと保存先IDを「予約した時点」の値としてクロージャに固定する
+  // （fire時点でstate.current/state.monthを読み直すと、切り替え後の別の日・月に上書きされ、
+  // 元の入力内容が保存されないまま消えてしまう）。
+  async function flushPendingSave(){
+    if (!state.saveTimer) return;
+    clearTimeout(state.saveTimer);
+    state.saveTimer = null;
+    const doc = state.pendingDoc;
+    state.pendingDoc = null;
+    if (!doc) return;
+    await saveDoc('report_docs', dayDocId(doc.date), doc);
+    state.monthDays[doc.date] = doc;
+    if (state.current === doc) setSaveIndicator('saved');
+    renderDayPills(); renderMonthChart(); renderMonthTotal();
+  }
+
   function scheduleSave(){
     setSaveIndicator('saving');
+    const doc = state.current;
+    state.pendingDoc = doc;
     if (state.saveTimer) clearTimeout(state.saveTimer);
     state.saveTimer = setTimeout(async () => {
-      await saveDoc('report_docs', dayDocId(state.current.date), state.current);
-      state.monthDays[state.current.date] = state.current;
-      setSaveIndicator('saved');
+      state.saveTimer = null;
+      state.pendingDoc = null;
+      await saveDoc('report_docs', dayDocId(doc.date), doc);
+      state.monthDays[doc.date] = doc;
+      if (state.current === doc) setSaveIndicator('saved');
       renderDayPills();
       renderMonthChart();
       renderMonthTotal();
     }, 600);
   }
 
+  async function flushPendingKgi(){
+    if (!state.kgiTimer) return;
+    clearTimeout(state.kgiTimer);
+    state.kgiTimer = null;
+    const pending = state.pendingKgi;
+    state.pendingKgi = null;
+    if (!pending) return;
+    await saveDoc('report_docs', monthDocId(pending.month), { month: pending.month, kgi: pending.kgi });
+  }
+
   function scheduleKgiSave(){
+    const pending = { month: state.month, kgi: state.kgi };
+    state.pendingKgi = pending;
     if (state.kgiTimer) clearTimeout(state.kgiTimer);
     state.kgiTimer = setTimeout(async () => {
-      await saveDoc('report_docs', monthDocId(state.month), { month: state.month, kgi: state.kgi });
+      state.kgiTimer = null;
+      state.pendingKgi = null;
+      await saveDoc('report_docs', monthDocId(pending.month), { month: pending.month, kgi: pending.kgi });
     }, 600);
   }
 
   async function loadMonth(monthStr){
+    await flushPendingKgi();
     const token = ++state.loadToken;
     state.month = monthStr;
     $('#month-label').textContent = `${monthStr.split('-')[0]}年${Number(monthStr.split('-')[1])}月`;
@@ -721,6 +757,7 @@
   }
 
   async function selectDate(dateStr){
+    await flushPendingSave();
     state.date = dateStr;
     $('#edit-date').value = dateStr;
     const month = dateStr.slice(0, 7);
@@ -862,6 +899,17 @@
   });
   $('#btn-today').addEventListener('click', () => {
     selectDate(toDateStr(state.today));
+  });
+
+  // タブを閉じる／別ページに移動する際、デバウンス待ちの保存が消えないよう試みる。
+  // unload中は非同期処理の完了が保証されないため、あくまでベストエフォート。
+  window.addEventListener('beforeunload', (e) => {
+    if (state.saveTimer || state.kgiTimer){
+      flushPendingSave();
+      flushPendingKgi();
+      e.preventDefault();
+      e.returnValue = '';
+    }
   });
 
   async function init(){
