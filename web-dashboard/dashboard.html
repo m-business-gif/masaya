@@ -229,6 +229,7 @@
       <a class="btn btn-ghost" href="index.html">🏠 ポータルへ</a>
       <a class="btn" href="report.html">📝 業務報告へ</a>
       <button class="btn" id="btn-settings">目標設定</button>
+      <button class="btn" id="btn-brand-settings">ブランド設定</button>
       <button class="btn" id="btn-ops-settings">稼働率設定</button>
       <button class="btn btn-primary" id="btn-upload">CSVを取り込む</button>
     </div>
@@ -309,6 +310,16 @@
         <table>
           <thead><tr><th>店舗</th><th>SV</th><th>売上</th><th>前月比</th><th>客数</th><th>客単価</th><th>目標達成率</th></tr></thead>
           <tbody id="salon-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>ブランド別実績（平均）</h3>
+      <p class="hint">「ブランド設定」で店舗にブランドを割り当てると、取り込み済みの全期間（対象月フィルターに関わらず）の月平均を表示します。</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ブランド</th><th>対象月数</th><th>平均新規客数</th><th>平均再来客数</th><th>平均客単価</th><th>平均物販</th><th>平均OP</th><th>平均回数券</th></tr></thead>
+          <tbody id="brand-tbody"></tbody>
         </table>
       </div>
     </div>
@@ -582,6 +593,19 @@
   </div>
 </div>
 
+<!-- Brand settings modal -->
+<div class="modal-backdrop" id="brand-backdrop" hidden>
+  <div class="modal">
+    <h2>ブランド設定</h2>
+    <p class="hint">店舗ごとにブランド名を設定すると、サマリー画面に「ブランド別実績（平均）」が表示されます。同じブランド名を複数の店舗に設定すると、それらの店舗の実績を月ごとに合算したうえで、取り込み済みの全期間で平均します。空欄の店舗は集計に含まれません。</p>
+    <div id="brand-fields"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="btn-brand-cancel">閉じる</button>
+      <button class="btn btn-primary" id="btn-brand-save">保存</button>
+    </div>
+  </div>
+</div>
+
 <!-- Operation (稼働率) settings modal -->
 <div class="modal-backdrop" id="ops-settings-backdrop" hidden>
   <div class="modal">
@@ -705,6 +729,54 @@
     const alerts = salons.filter(s=>s.isLow).map(s=>`${s.salon}：目標達成率${s.targetAchievementPct}%（しきい値${threshold}%）`);
 
     return {salons, total:{sales:totalSales, momSalesPct:totalMomPct, customers:totalCustomers, newCount:totalNew, returningCount:totalReturning, avgSpend:totalAvg}, alerts};
+  }
+
+  // ブランド別の平均実績（新規客数・再来客数・客単価・物販・OP・回数券）。
+  // 対象月フィルターに関わらず、取り込み済みの全期間を対象に「ブランドに属する店舗の月合計」を
+  // 月ごとに求め、その月次合計を全期間で平均する（月による欠測があっても店舗単位の平均に引きずられない）。
+  function buildBrandAverages(rows){
+    const brandMonths = new Map();
+    for (const r of rows){
+      const brand = brandOf(r.salon);
+      if (!brand) continue;
+      const month = monthKeyOf(r.date);
+      if (!month) continue;
+      if (!brandMonths.has(brand)) brandMonths.set(brand, new Map());
+      const monthMap = brandMonths.get(brand);
+      if (!monthMap.has(month)) monthMap.set(month, {sales:0, productSales:0, optionSales:0, ticketBookSales:0, rows:[]});
+      const e = monthMap.get(month);
+      e.sales += r.amount||0;
+      const c = classify(r);
+      if (c==='product') e.productSales += r.amount||0;
+      else if (c==='option') e.optionSales += r.amount||0;
+      else if (c==='ticketBook') e.ticketBookSales += r.amount||0;
+      e.rows.push(r);
+    }
+
+    const result = [];
+    for (const [brand, monthMap] of brandMonths){
+      const months = [...monthMap.values()].map(e=>{
+        const visits = dedupeVisits(e.rows);
+        const newCount = visits.filter(v=>v.customerType==='新規').length;
+        const returningCount = visits.filter(v=>v.customerType==='再来').length;
+        return {sales:e.sales, newCount, returningCount, productSales:e.productSales, optionSales:e.optionSales, ticketBookSales:e.ticketBookSales};
+      });
+      const n = months.length;
+      if (!n) continue;
+      const sum = key => months.reduce((s,m)=>s+m[key],0);
+      const totalCustomers = sum('newCount') + sum('returningCount');
+      result.push({
+        brand,
+        monthCount: n,
+        avgNewCount: Math.round(sum('newCount')/n),
+        avgReturningCount: Math.round(sum('returningCount')/n),
+        avgSpend: totalCustomers>0 ? Math.round(sum('sales')/totalCustomers) : 0,
+        avgProductSales: Math.round(sum('productSales')/n),
+        avgOptionSales: Math.round(sum('optionSales')/n),
+        avgTicketBookSales: Math.round(sum('ticketBookSales')/n),
+      });
+    }
+    return result.sort((a,b)=>(b.avgNewCount+b.avgReturningCount)-(a.avgNewCount+a.avgReturningCount));
   }
 
   function buildStaff(rows){
@@ -920,6 +992,7 @@
       menu: buildMenu(thisRows),
       products: buildProducts(thisRows),
       traffic: buildTraffic(thisRows),
+      brandAverages: buildBrandAverages(rows),
     };
   }
 
@@ -1095,6 +1168,10 @@
   function svOf(salon){
     const rule = royaltyRules.find(r=>r.matchedSalon===salon);
     return rule ? rule.owner : null;
+  }
+
+  function brandOf(salon){
+    return (brandSettings.bySalon && brandSettings.bySalon[salon]) || '';
   }
 
   async function loadRoyaltySettings(){
@@ -1413,6 +1490,7 @@
   let currentRows = [];
   let isSample = true;
   let targets = {default:0, bySalon:{}, lowThresholdPct:70};
+  let brandSettings = {bySalon:{}};
   let opsSettings = {shiftHours:8, defaultSlotMinutes:75, categoryMinutes:{}, menuMinutes:{}};
   let plSettings = {cogsRates:{product:0, option:0, menu:0}, laborRate:0, laborRateByStaff:{}, fixedCostsBySalon:{}};
   const renderedViews = new Set();
@@ -1712,6 +1790,21 @@
         <td class="num">${s.customers.toLocaleString('ja-JP')}人</td>
         <td class="num">${s.salonCount}店舗</td>
       </tr>`).join('') || '<tr><td colspan="5">データなし</td></tr>';
+
+    const brandRows = dash.brandAverages || [];
+    $('#brand-tbody').innerHTML = brandRows.length
+      ? brandRows.map(b=>`
+        <tr>
+          <td>${escapeHtml(b.brand)}</td>
+          <td class="num">${b.monthCount}か月</td>
+          <td class="num">${b.avgNewCount.toLocaleString('ja-JP')}人</td>
+          <td class="num">${b.avgReturningCount.toLocaleString('ja-JP')}人</td>
+          <td class="num">${yen(b.avgSpend)}</td>
+          <td class="num">${yen(b.avgProductSales)}</td>
+          <td class="num">${yen(b.avgOptionSales)}</td>
+          <td class="num">${yen(b.avgTicketBookSales)}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="8">ブランドが設定されていません（「ブランド設定」から店舗にブランドを割り当ててください）</td></tr>';
   }
 
   function renderStaff(dash){
@@ -1819,6 +1912,11 @@
       if (tsnap.exists) targets = Object.assign({default:0, bySalon:{}, lowThresholdPct:70}, tsnap.data());
     }catch(e){ /* keep defaults */ }
 
+    try{
+      const bsnap = await db.doc('settings/brand').get();
+      if (bsnap.exists) brandSettings = Object.assign({bySalon:{}}, bsnap.data());
+    }catch(e){ /* keep defaults */ }
+
     await loadRoyaltySettings();
 
     try{
@@ -1879,6 +1977,33 @@
     $('#settings-backdrop').hidden = true;
     renderAll();
     toast('目標を保存しました');
+  });
+
+  /* ---------- ブランド設定 ---------- */
+  $('#btn-brand-settings').addEventListener('click', ()=>{
+    const names = knownSalonNames();
+    $('#brand-fields').innerHTML = names.map(name=>`
+      <div class="field-row">
+        <label>${escapeHtml(name)}</label>
+        <input type="text" data-salon="${escapeHtml(name)}" value="${escapeHtml((brandSettings.bySalon&&brandSettings.bySalon[name])||'')}" placeholder="未設定">
+      </div>`).join('') || '<p class="hint">まだ店舗データがありません。先にCSVを取り込んでください。</p>';
+    $('#brand-backdrop').hidden = false;
+  });
+  $('#btn-brand-cancel').addEventListener('click', ()=>{ $('#brand-backdrop').hidden = true; });
+  $('#btn-brand-save').addEventListener('click', async ()=>{
+    const bySalon = {};
+    $$('#brand-fields input[data-salon]').forEach(inp=>{
+      const v = inp.value.trim();
+      if (v) bySalon[inp.dataset.salon] = v;
+    });
+    brandSettings = {bySalon};
+    if (db){
+      try{ await db.doc('settings/brand').set(Object.assign({}, brandSettings, {updatedAt:new Date().toISOString()})); }
+      catch(e){ toast('保存に失敗しました。もう一度お試しください。'); }
+    }
+    $('#brand-backdrop').hidden = true;
+    renderAll();
+    toast('ブランド設定を保存しました');
   });
 
   /* ---------- 稼働率設定 ---------- */
