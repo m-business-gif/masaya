@@ -2252,11 +2252,13 @@
     if (!mapped.length){ toast('取り込める行がありませんでした。列の指定を確認してください。'); return; }
 
     if (!db){
-      // no persistence available in this view; keep in-memory for this session only
+      // データベース未接続。画面には一時反映するが、閉じる/再読み込みで消えるため
+      // 「成功」と紛らわしい表示は絶対にしない（保存されたと誤解されるとデータ消失に気づけない）。
       currentRows = isSample ? mapped : currentRows.concat(mapped);
       isSample = false;
       renderAll();
-      showUploadDone(true, '取り込みが完了しました', `${mapped.length}件を取り込みました（この端末のみ・保存はされません）`);
+      showUploadDone(false, '保存されていません（この画面を閉じると消えます）',
+        `データベースに接続できていないため、${mapped.length}件はこの端末に一時的に表示しているだけです。ページを再読み込みしてから、もう一度「CSVを取り込む」をやり直してください。`);
       return;
     }
 
